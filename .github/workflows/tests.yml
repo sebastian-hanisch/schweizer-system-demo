@@ -1,0 +1,39 @@
+name: Tests
+
+on:
+  # Wöchentlicher Lauf: requirements.txt ist nicht gepinnt (>=), CI und Streamlit Cloud installieren also immer
+  # die neuesten Versionen. So fällt ein Bruch durch ein Streamlit-/Plotly-Update auf, bevor der nächste Push
+  # oder Neustart der Demo ihn sichtbar macht. Rote Läufe meldet demo-health.yml der Website täglich.
+  schedule:
+    - cron: "14 4 * * 1"
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Python einrichten
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Abhängigkeiten installieren
+        run: pip install -r requirements-dev.txt
+
+      - name: bbpPairings (FIDE-Referenz-Engine) laden
+        run: |
+          curl -sL -o bbp.tar.gz https://github.com/BieremaBoyzProgramming/bbpPairings/releases/download/v6.0.0/bbpPairings-v6.0.0-x86_64-pc-linux.tar.gz
+          tar -xzf bbp.tar.gz
+          echo "BBPPAIRINGS_EXE=$(pwd)/bbpPairings-v6.0.0/bbpPairings" >> "$GITHUB_ENV"
+          chmod +x bbpPairings-v6.0.0/bbpPairings
+        continue-on-error: true
+
+      - name: Tests ausführen
+        run: python -m pytest tests/ -v --durations=10
