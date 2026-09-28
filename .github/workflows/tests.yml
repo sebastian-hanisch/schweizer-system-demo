@@ -31,8 +31,8 @@ jobs:
         run: |
           curl -sL -o bbp.tar.gz https://github.com/BieremaBoyzProgramming/bbpPairings/releases/download/v6.0.0/bbpPairings-v6.0.0-x86_64-pc-linux.tar.gz
           tar -xzf bbp.tar.gz
-          echo "BBPPAIRINGS_EXE=$(pwd)/bbpPairings-v6.0.0/bbpPairings" >> "$GITHUB_ENV"
-          chmod +x bbpPairings-v6.0.0/bbpPairings
+          echo "BBPPAIRINGS_EXE=$(pwd)/bbpPairings-v6.0.0/bbpPairings.exe" >> "$GITHUB_ENV"
+          chmod +x bbpPairings-v6.0.0/bbpPairings.exe
         continue-on-error: true
 
       - name: Tests ausführen
