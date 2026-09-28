@@ -8,8 +8,7 @@ import random
 
 import pytest
 
-from ss_blossom import NoValidPairingError
-from ss_engine import apply_round, pair_round
+from ss_engine import NoValidPairingError, apply_round, pair_round
 from ss_model import BYE, GameRecord, Player
 
 
@@ -50,6 +49,49 @@ def test_dutch_2025_c9_fixture_matches_bbppairings_exactly():
     pairs = {(p.white, p.black) for p in result.pairings}
     assert result.bye == 4
     assert pairs == {(2, 1), (3, 5)}
+
+
+def test_mdp_pairing_compares_quality_across_all_mdp_permutations():
+    # Regressionstest (echter, gegen bbpPairings.exe gefundener und dort nachvollzogener Bug):
+    # MDP 2 (score1.0, floatet aus der score3.0-Bracket [nicht abgebildet, hier direkt als Runde-2-
+    # Ausgangslage]) hat zwei mögliche Partner in der score0.0-Bracket, beide C1-kompatibel: 1 (Farb-
+    # konflikt, beide STARKE Schwarz-Präferenz aus je einem Weiss-Sieg) oder 6 (kein Konflikt). Die
+    # Suche muss ALLE mdp_perm-Wahlen nach Qualität vergleichen (Art. 4.2-Reihenfolge ist nur die
+    # ERZEUGUNGS-, nicht automatisch die Prioritätsreihenfolge über mehrere mdp_perm hinweg) - sonst
+    # gewinnt die lexikografisch erste (2 mit 1), nur weil ihre Restgruppe genug Kandidaten liefert,
+    # um das Suchbudget zu füllen, bevor die zweite (2 mit 6) überhaupt versucht wird.
+    players = {
+        1: _mk(1, 0.0, [(4, "w", 0)]),
+        2: _mk(2, 1.0, [(5, "b", 1)]),
+        3: _mk(3, 0.0, [(6, "w", 0)]),
+        4: _mk(4, 1.0, [(1, "b", 1)]),
+        5: _mk(5, 0.0, [(2, "w", 0)]),
+        6: _mk(6, 1.0, [(3, "b", 1)]),
+    }
+    result = pair_round(players, round_no=2)
+    pairs = {frozenset((p.white, p.black)) for p in result.pairings}
+    assert pairs == {frozenset({1, 6}), frozenset({2, 4}), frozenset({3, 5})}
+
+
+def test_bye_assignment_prefers_lowest_score_c5_over_first_found_completion():
+    # Regressionstest (echter, gegen bbpPairings.exe gefundener Bug, exakter Turnierstand aus einem
+    # 5-Spieler-Zufallsturnier reproduziert): [C5] ("minimiere den Score des Freilos-Empfängers",
+    # Art. 2.3.1) wurde von der Bracket-lokalen Suche gar nicht geprüft - sie akzeptierte schlicht
+    # die ERSTE vollständige Rundenlösung. Ohne Nachbesserung (`_improve_bye_assignment`) bekommt
+    # hier Spieler 1 (Score 3.0, der Spitzenreiter!) das Freilos - korrekt bekommt es Spieler 4
+    # (Score 2.0, niedriger), exakt wie bbpPairings.exe.
+    def _game(round_no, opponent, colour, score, is_bye=False):
+        return GameRecord(round_no, opponent if not is_bye else BYE, colour, score, counted_as_bye=is_bye)
+
+    players = {
+        1: Player(rank=1, score=3.0, games=(_game(1, 3, "w", 1.0), _game(2, 5, "b", 1.0), _game(3, 4, "w", 1.0))),
+        2: Player(rank=2, score=1.0, games=(_game(1, 4, "b", 0.0), _game(2, 0, None, 1.0, is_bye=True), _game(3, 5, "w", 0.0))),
+        3: Player(rank=3, score=1.0, games=(_game(1, 1, "b", 0.0), _game(2, 4, "w", 0.0), _game(3, 0, None, 1.0, is_bye=True))),
+        4: Player(rank=4, score=2.0, games=(_game(1, 2, "w", 1.0), _game(2, 3, "b", 1.0), _game(3, 1, "b", 0.0))),
+        5: Player(rank=5, score=2.0, games=(_game(1, 0, None, 1.0, is_bye=True), _game(2, 1, "w", 0.0), _game(3, 2, "b", 1.0))),
+    }
+    result = pair_round(players, round_no=4)
+    assert result.bye == 4
 
 
 def test_round_one_fresh_field_uses_canonical_top_half_vs_bottom_half():

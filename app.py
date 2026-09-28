@@ -57,12 +57,12 @@ with st.expander("So funktioniert das Schweizer System (FIDE Dutch)", expanded=T
 1. **Absolute Kriterien (C1-C3, müssen immer gelten)**: zwei Spieler treffen nie zweimal aufeinander; wer
    schon ein Freilos hatte, bekommt kein zweites; Spieler mit derselben *absoluten* Farbpräferenz treffen
    (außer bei Spitzenreitern) nicht aufeinander.
-2. **Die ganze Runde als ein gewichtetes Matching**: statt Bracket für Bracket nacheinander zu entscheiden,
-   wird die komplette Runde auf einmal gelöst - ein Knoten je Spieler, plus ein virtueller Freilos-Knoten bei
-   ungerader Teilnehmerzahl. Jede zulässige Paarung ist eine Kante, ihr Gewicht kodiert alle Kriterien C5-C21
-   in absteigender Priorität als eine einzige Zahl (höchste Priorität = signifikanteste Stelle). Der
-   [gewichtete Blossom-Algorithmus](https://github.com/sebastian-hanisch/weighted-blossom-demo) (Edmonds,
-   bereits an anderer Stelle dieses Portfolios gebaut) findet das beweisbar beste Matching dazu.
+2. **Bracket für Bracket, wörtlich nach dem Regeltext (Art. 3+4)**: pro Score-Bracket wird zuerst die
+   "natürliche" Paarung gebildet (obere Hälfte gegen untere Hälfte in Rangreihenfolge). Erfüllt das nicht alle
+   Kriterien, werden Umordnungen (Transposition) und danach Tausche zwischen den beiden Hälften in einer exakt
+   vorgegebenen Reihenfolge durchprobiert, bis der erste "perfekte" Kandidat gefunden ist oder alle
+   Möglichkeiten erschöpft sind - dann gewinnt der beste bisher gefundene. Nicht gepaarte Spieler floaten in
+   die nächste (niedrigere) Bracket.
 3. **Farbzuteilung** (Art. 5.2) läuft danach als eigener, deterministischer Schritt: gemeinsame Präferenz
    zuerst, dann die stärkere Einzelpräferenz, dann Alternierung, zuletzt Ranglistenposition.
         """
@@ -124,21 +124,24 @@ st.subheader("📐 Wie genau ist die Nachbildung wirklich?")
 st.markdown(
     """
 **Ehrlich gemessen, nicht behauptet**: die absoluten Kriterien (C1-C3, "zwei Spieler treffen nie zweimal
-aufeinander" usw.) gelten in dieser Demo **beweisbar immer** - dafür sorgt die Konstruktion des Matchings selbst
-(eine verbotene Paarung existiert als Kante schlicht nicht). Für die *Qualitätskriterien* (C6-C21, z. B. "wer
-floatet, wenn eine Bracket nicht aufgeht") wurde die Engine direkt gegen **bbpPairings** (die offizielle,
-FIDE-anerkannte Referenz-Engine) auf hunderten zufälligen Testrunden geprüft:
+aufeinander" usw.) gelten in dieser Demo **beweisbar immer** - eine verbotene Paarung wird nie als Kandidat
+gebildet. Für die *Qualitätskriterien* (C6-C21, z. B. "wer floatet, wenn eine Bracket nicht aufgeht") wurde die
+Engine direkt gegen **bbpPairings** (die offizielle, FIDE-anerkannte Referenz-Engine) auf hunderten zufälligen
+Testrunden geprüft:
 """
 )
 mc1, mc2 = st.columns(2)
-mc1.metric("Exakte Übereinstimmung (Qualitätskriterien)", "~66 %", help="Gemessen an zufälligen Mehrrundenturnieren, 4-10 Spieler, 1-3 Runden - siehe README für die vollständige Methodik.")
+mc1.metric("Exakte Übereinstimmung (Qualitätskriterien)", "~98 %", help="Gemessen an zufälligen Mehrrundenturnieren, 4-16 Spieler, 1-4 Runden (1427 Vergleiche) - auf einer bewusst härteren Stichprobe (6-19 Spieler, bis 6 Runden) ~92 %. Siehe README für die vollständige Methodik.")
 mc2.metric("Übereinstimmung bei Runde 1 (frisches Feld)", "100 %", help="Die 'obere Hälfte gegen untere Hälfte'-Standardaufteilung wird exakt nachgebildet.")
 st.markdown(
     """
-Der Rest der Abweichung liegt an bbpPairings' eigener, nicht dokumentierter interner Gewichtsstaffelung für die
-Tie-Breaks innerhalb der Qualitätskriterien, die sich aus der reinen Regeltext-Lektüre nicht vollständig
-rekonstruieren ließ - mehrere konkrete Hypothesen wurden getestet und wieder verworfen, weil sie den Abgleich
-nicht verbesserten. Das ist eine bewusste, offen ausgewiesene Grenze dieser Demo, keine verschwiegene.
+Die eingebaute Vorausschau ([C8], "erreicht die nächste Bracket ihr eigenes Maximum?") prüft per echter,
+beliebig tiefer Rekursion die GESAMTE restliche Kette, nicht nur den nächsten Schritt. Der Rest der Abweichung
+wurde direkt aus bbpPairings' eigenem Quellcode heraus untersucht: es sind echte Gleichstände zwischen mehreren,
+nach allen 21 Kriterien exakt gleich bewerteten Kandidaten - die Referenz-Engine löst SOLCHE Reste über ein
+mehrstufiges Neu-Lösen mit angepassten Kantengewichten, nicht über eine einzelne feste Regel. Eine aus diesem
+Mechanismus abgeleitete Heuristik hilft messbar (98,2 %/92,0 % statt 97,8 %/86,7 % vorher), ist aber
+nachweislich nicht in jedem Einzelfall korrekt - offen ausgewiesen, keine verschwiegene Lücke.
 """
 )
 
@@ -147,29 +150,32 @@ st.markdown("---")
 with st.expander("📐 Mathematische Formulierung"):
     st.markdown(
         r"""
-**Modell.** Eine Runde ist ein **gewichtetes perfektes Matching** über den Graphen $G=(V,E)$, $V$ = aktive
-Spieler (plus ein virtueller Freilos-Knoten bei ungerader Anzahl), $E$ = alle Paare, die C1 (keine Wiederholung)
-und C3 (keine absolute Farbkollision) erfüllen. Jede Kante $(i,j)$ trägt ein Gewicht
+**Modell.** Eine Runde wird **Bracket für Bracket** gelöst (Score absteigend, Art. 1.9.2) - keine
+Neuformulierung als ein einziges globales Matching, sondern die im Regeltext selbst vorgeschriebene
+Prozedur (Art. 3+4): pro Bracket wird eine Menge $S_1$ (die ersten $N_1$ Spieler nach Rang) gegen $S_2$
+(die restlichen) paarungskandidaten gebildet, $S_1[i]$ gegen $S_2[i]$. Erfüllt dieser Kandidat nicht alle
+Kriterien, werden Umordnungen $\pi$ von $S_2$ (Transpositionen) und danach Tausche gleich großer Gruppen
+zwischen $S_1$ und $S_2$ durchprobiert. Statt nur den lokal besten Kandidaten je Bracket zu schätzen, liefert
+die Suche ALLE brauchbaren Kandidaten in Prioritätsreihenfolge (Art. 3.8.1) - die Rundenlösung probiert für
+jeden per echter Rekursion, ob sich die restliche Runde damit zu Ende lösen lässt (**echtes Backtracking**
+statt einer Schätzung), und geht erst bei Fehlschlag zum nächsten Kandidaten über. Jedes Kriterium
+$C_{10}, ..., C_{21}$ ist dabei eine eigenständige, kleine ganze Zahl - der Vergleich ist ein direkter
+lexikografischer Tupel-Vergleich, kein gemischt-radix-Kodiertrick nötig.
 
-$$
-w(i,j) = \sum_{k} t_k(i,j) \cdot \text{BASIS}^{n-1-k},
-$$
-
-eine gemischt-radix-Kodierung der Kriterien C5-C21 in absteigender Priorität (höchste Priorität = größte
-Potenz von BASIS). Da BASIS größer ist als jeder einzelne Term, dominiert jede höherprioritäre Stelle
-JEDE mögliche Kombination aller niedrigeren Stellen zusammen - das gewichtsmaximale Matching ist damit
-automatisch lexikografisch optimal in den kodierten Kriterien.
-
-**Warum ein Matching-Algorithmus?** Das Paarungsproblem ist strukturell ein **allgemeines** (nicht bipartites)
-Graphenproblem - jeder Spieler kann mit jedem anderen kompatiblen Spieler zusammentreffen, nicht nur zwischen
-zwei festen Gruppen. Der [Edmonds-Blossom-Algorithmus](https://github.com/sebastian-hanisch/weighted-blossom-demo)
-(1965, hier mit Galils primal-dualer Methode) ist das Standardverfahren dafür und liefert ein bewiesenes Optimum,
-keine Heuristik.
+**Warum nicht ein globales Matching?** Eine frühere Fassung dieser Demo löste die ganze Runde als EIN
+gewichtetes allgemeines Matching (wie [`weighted-blossom-demo`](https://github.com/sebastian-hanisch/weighted-blossom-demo)),
+weil die Referenz-Engine bbpPairings das intern so tut. Das erreichte ~66 % Übereinstimmung mit bbpPairings,
+war aber eine Nachbildung von bbpPairings' eigener Implementierungsstrategie, nicht des FIDE-Regeltexts
+selbst. Die direkte Umsetzung von Art. 3+4 (Transposition/Tausch statt globalem Matching) mit echtem
+Backtracking hob die Übereinstimmung auf ~98 % - siehe README für die vollständige Herleitung. Für die
+verbliebene ~2-8 %-Lücke (echte Gleichstände) wurde bbpPairings' Quellcode noch einmal gezielt gelesen, um NUR
+das Grundprinzip eines EINZELNEN Tie-Break-Kriteriums (`_exchange_cost`) zu übernehmen - die Bracket-für-
+Bracket-Architektur nach Art. 3+4 bleibt dabei die tragende Suche, kein Rückbau zum globalen Matching.
 
 **Elo-Erwartungswert** (Simulation der Turnierverläufe): $E_A = 1/(1+10^{(R_B-R_A)/400})$.
 
-Implementiert in `ss_engine.py` (Orchestrierung), `ss_weights.py` (Kriterien-Kodierung), `ss_blossom.py`
-(Matching-Kern) und `ss_colour.py` (Farbzuteilung).
+Implementiert in `ss_engine.py` (Bracket-Verkettung), `ss_bracket.py` (Transposition/Tausch-Suche),
+`ss_quality.py` (Kriterien C10-C21) und `ss_colour.py` (Farbzuteilung).
         """
     )
 

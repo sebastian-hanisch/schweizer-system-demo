@@ -98,3 +98,19 @@ def test_allocate_falls_back_to_rank_even_numbers():
     # höherrangiger ist 2 (gerade) -> bekommt Schwarz, 3 bekommt Weiss
     assert pairing.white == 3
     assert pairing.black == 2
+
+
+def test_allocate_same_unresolved_strong_preference_grants_to_higher_rank():
+    # Regressionstest (echter, gegen bbpPairings.exe gefundener Bug): beide Spieler haben je EIN
+    # Weiss-Spiel gewonnen (diff=+1 -> STARKE Schwarz-Präferenz), keine gemeinsame Historie, also
+    # weder 5.2.1 (verschiedene Farben) noch 5.2.2 (unterschiedliche Stärke) noch 5.2.3 (Alternierung
+    # löst nichts, da beide zu Schwarz alternieren wollen). Art. 5.2.4 verlangt: der höherrangige
+    # Spieler (1) bekommt SEINE (=ihre gemeinsame) Präferenz - hier fälschlich übersprungen und
+    # direkt zu 5.2.5 (reine Paritätsregel) gesprungen, was Spieler 1 WEISS statt SCHWARZ gab.
+    higher = _p(1, [(9, "w")])
+    lower = _p(4, [(8, "w")])
+    assert classify(higher).strength == STRONG and classify(higher).colour == BLACK
+    assert classify(lower).strength == STRONG and classify(lower).colour == BLACK
+    pairing = allocate(higher, lower)
+    assert pairing.black == higher.rank
+    assert pairing.white == lower.rank

@@ -1,9 +1,8 @@
 """Farbpräferenz-Klassifikation und Art.-5.2-Farbzuteilung.
 
 Reine Funktionen: die Zuteilung ist KEIN Suchproblem, sondern ein deterministischer Ablauf durch
-eine feste Prioritätenliste, sobald das Paar bereits feststeht (die PaarungsSUCHE selbst optimiert
-nur, WER auf WEN trifft, über C9-C21 in `ss_weights.py` - welche Farbe folgt danach, s. Modul-
-Doku in `ss_engine.py`).
+eine feste Prioritätenliste, sobald das Paar bereits feststeht (die PaarungsSUCHE selbst entscheidet
+nur, WER auf WEN trifft, s. `ss_bracket.py` - welche Farbe folgt danach, ein eigener Schritt).
 """
 
 from __future__ import annotations
@@ -85,7 +84,13 @@ def allocate(a: Player, b: Player) -> Pairing:
         # Beide alternieren zu verschiedenen Farben - konfliktfrei erfüllbar.
         return Pairing(white=a.rank, black=b.rank) if alt_a == WHITE else Pairing(white=b.rank, black=a.rank)
 
-    return _allocate_by_rank(a, b)
+    # 5.2.4: beide wollen (nach 5.2.1-5.2.3 unaufgelöst) dieselbe Farbe - der höherrangige Spieler
+    # bekommt SEINE (=ihre gemeinsame) Präferenz erfüllt. NICHT dieselbe Regel wie 5.2.5 (die gilt
+    # nur, wenn WEDER Spieler überhaupt eine Präferenz hat, s. Aufruf oben in 5.2.1).
+    higher, lower = (a, b) if a.rank < b.rank else (b, a)
+    if pa.colour == WHITE:
+        return Pairing(white=higher.rank, black=lower.rank)
+    return Pairing(white=lower.rank, black=higher.rank)
 
 
 def _pairing_with_preference(a: Player, b: Player, winner: Player, winner_pref: ColourPreference) -> Pairing:

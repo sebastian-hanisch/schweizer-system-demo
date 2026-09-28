@@ -1,24 +1,13 @@
-"""Edmonds' gewichteter Blossom-Algorithmus - schlanker Kern, portiert aus
-`weighted-blossom-demo/wb_blossom.py` (Galil 1986, dieselbe primal-duale Methode wie
-`networkx.max_weight_matching`).
+"""Unveränderter (unbewerteter) Blossom-Kern, portiert aus `weighted-blossom-demo/wb_blossom.py`
+(unveränderte Augmenting-Path-/Kontraktions-Arithmetik, nur ohne Ereignisprotokoll).
 
-**Unterschied zu `wb_blossom.py`**: dort ist der Löser das eigentliche Demo-Thema, mit
-vollem Ereignisprotokoll (jede Runde, jede Kontraktion, jeder Delta-Schritt als
-`Event`/`Snapshot`) für die Schritt-für-Schritt-Visualisierung. Hier ist der Löser nur
-ein INTERNES Werkzeug für die Kriterien C9-C21 (die Paarung selbst ist das Thema dieser
-Demo, nicht der Matching-Algorithmus) - deshalb ohne Protokollierung, nur das Ergebnis
-(`pairs`). Die Dualwert-Arithmetik (assignLabel/scanBlossom/addBlossom/expandBlossom/
-augmentBlossom/augmentMatching, Delta-Typen 1-4) ist UNVERÄNDERT aus `wb_blossom.py`
-übernommen - siehe dort für die ausführliche Herleitung/Fallstrick-Dokumentation.
-
-**Kardinalität.** `max_weight_perfect_matching` braucht immer eine PERFEKTE Paarung (alle Knoten
-gepaart) - die ganze Runde wird als EIN Matching über alle aktiven Spieler PLUS einen virtuellen
-Freilos-Knoten gelöst (`ss_engine.py`), keine separate Downfloater-Vorauswahl mehr nötig: Bracket-
-Priorität (C6-C9) steckt direkt in den Kantengewichten (`ss_weights.py`), nicht in einer
-sequenziellen Bracket-für-Bracket-Verarbeitung - siehe `project_turnierplanung_dag_scoping.md` für
-die Architekturbegründung. Intern derselbe `(maxcost+1)`-Trick wie in `wb_blossom.py`
-(`maxcardinality=True`): macht jede Kante lohnend, sodass die interne Maximierung nie freiwillig
-einen Knoten unpaarig lässt, wenn eine perfekte Paarung möglich ist.
+**Verwendung in dieser Demo**: `ss_bracket.py` folgt dem FIDE-Regeltext WÖRTLICH (Art. 3+4:
+Transposition/Tausch-Suche pro Bracket, siehe dortige Modul-Doku) statt die Kriterien C9-C21 als
+ein einziges globales gewichtetes Matching umzuformulieren (das war ein früherer, inzwischen
+verworfener Ansatz - siehe project_turnierplanung_dag_scoping.md). Dieses Modul liefert dafür nur
+noch die reine EXISTENZ-Probe für Art. 2.2.1 [C4] ("eine Paarung, die alle absoluten Kriterien
+erfüllt, muss für alle noch ungepaarten Spieler immer existieren") - eine UNGEWICHTETE
+Kardinalitäts-Paarung reicht dafür, keine Gewichte nötig.
 """
 
 from __future__ import annotations
@@ -41,34 +30,14 @@ class _NoNode:
     pass
 
 
-class NoValidPairingError(ValueError):
-    """Für diese Runde existiert keine Paarung, die alle absoluten Kriterien (C1-C3) gleichzeitig
-    erfüllt - ein echter, in der FIDE-Praxis vorkommender Fall (bbpPairings meldet denselben
-    Zustand als eigenen Fehlercode 1: "No valid pairing exists"), keine Ausnahme/kein Bug."""
-
-
-def max_weight_perfect_matching(n: int, adj: list[list[int]], weight: dict[tuple[int, int], int]) -> dict[int, int]:
-    """n Knoten (0..n-1), adj[v] = Nachbarliste, weight[(min(i,j),max(i,j))] = nicht-negatives
-    Gewicht. Wirft `NoValidPairingError`, wenn keine perfekte Paarung existiert (z. B. weil unter
-    den verbliebenen Spielern jedes Paar schon einmal gegeneinander gespielt hat - siehe
-    `NoValidPairingError`)."""
-    if n % 2 != 0:
-        raise ValueError("max_weight_perfect_matching braucht eine gerade Knotenzahl")
-    mate = _solve(n, adj, weight)
-    if len(mate) != n:
-        raise NoValidPairingError("keine Paarung erfüllt für alle Spieler gleichzeitig C1-C3")
-    return mate
-
-
 def maximum_cardinality_matching(n: int, adj: list[list[int]]) -> dict[int, int]:
-    """Größtmögliche (nicht notwendig perfekte) Paarung - nur für `ss_downfloat.py`s
-    Vervollständigbarkeits-Probe (C8): zählt, wie viele Spieler sich überhaupt paaren lassen,
-    unabhängig von C9-C21 (dafür genügt ein einheitliches Gewicht 1 auf jeder zulässigen Kante -
-    der `(maxcost+1)`-Mechanismus maximiert dann automatisch zuerst die Anzahl)."""
-    return _solve(n, adj, {})
+    """Größtmögliche (nicht notwendig perfekte) Paarung - reine Existenz-/Kardinalitäts-Probe für
+    [C4], unabhängig von den Qualitätskriterien C6-C21 (die entscheidet `ss_bracket.py`s eigene
+    Transposition/Tausch-Suche, nicht dieses Modul)."""
+    return _solve(n, adj)
 
 
-def _solve(n: int, adj: list[list[int]], weight: dict[tuple[int, int], int]) -> dict[int, int]:
+def _solve(n: int, adj: list[list[int]]) -> dict[int, int]:
     if n == 0:
         return {}
 
@@ -77,17 +46,9 @@ def _solve(n: int, adj: list[list[int]], weight: dict[tuple[int, int], int]) -> 
         return {}
 
     def iw(i, j):
-        # Anders als wb_blossom.py (das intern MINIMIERT und darum cost -> (maxcost+1)-cost dreht):
-        # hier wird direkt MAXIMIERT (größeres C9-C21-Gewicht = besser), also OHNE Vorzeichen-/
-        # Verschiebungstrick - das Gewicht selbst ist bereits die zu maximierende Größe. Die
-        # Perfektheits-Priorität (maxcardinality) kommt allein aus `dualvar[v] = maxiw` für alle v
-        # (macht anfangs nur die größten Kanten straff, die Suche wächst von dort über alle
-        # Knoten), exakt wie networkx' eigenes max_weight_matching(..., maxcardinality=True).
-        # Leeres `weight`-Dict (maximum_cardinality_matching) -> einheitliches Gewicht 1 auf jeder
-        # zulässigen Kante, damit ausschließlich die Kardinalität zählt.
-        return weight.get((i, j) if i < j else (j, i), 1) if weight else 1
+        return 1  # nur Kardinalität zählt, kein Gewicht
 
-    maxiw = max([0] + [iw(i, j) for i, j in feasible])
+    maxiw = 1
 
     NONODE = _NoNode()
     mate: dict = {}

@@ -7,6 +7,7 @@ bleibt - genau wie die TRF-Spielernummer, mit der `ss_oracle_bbppairings.py` abg
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from functools import cached_property
 
 BYE = 0  # Spielernummer 0 = Freilos-Gegner, wie in TRF-Dateien üblich (bbpPairings-Konvention)
 
@@ -35,19 +36,26 @@ class Player:
     games: tuple[GameRecord, ...] = field(default_factory=tuple)
     float_history: tuple[str | None, ...] = field(default_factory=tuple)  # je Runde: DOWN, UP oder None
 
-    @property
+    # `cached_property` statt `property`: `Player` ist unveränderlich (frozen dataclass, `games`
+    # ändert sich nie nach Konstruktion) - diese Werte hängen NUR von `self.games`/`self.float_
+    # history` ab, sind also für die Lebensdauer der Instanz konstant. Die Bracket-Suche ruft sie
+    # (v. a. `opponents`, über `ss_compat.compatible`, und die Farbklassifikation über `classify`)
+    # millionenfach für DIESELBEN Spieler-Instanzen auf, während sie viele Kandidaten durchprobiert
+    # - reines Cachen einer bereits deterministischen Berechnung, keine Verhaltensänderung (real
+    # gemessener Performance-Fund: >5 Mio. `classify`-Aufrufe in einem einzigen Rundenaufruf).
+    @cached_property
     def opponents(self) -> frozenset[int]:
         return frozenset(g.opponent for g in self.games if g.opponent != BYE)
 
-    @property
+    @cached_property
     def had_bye_or_equivalent(self) -> bool:
         return any(g.counted_as_bye for g in self.games)
 
-    @property
+    @cached_property
     def unplayed_games(self) -> int:
         return sum(1 for g in self.games if g.opponent == BYE)
 
-    @property
+    @cached_property
     def colour_difference(self) -> int:
         """Weiß-Partien minus Schwarz-Partien (bei echten Partien, Freilose zählen nicht)."""
         diff = 0
@@ -58,12 +66,12 @@ class Player:
                 diff -= 1
         return diff
 
-    @property
+    @cached_property
     def last_two_colours(self) -> tuple[str, ...]:
         played = [g.colour for g in self.games if g.colour is not None]
         return tuple(played[-2:])
 
-    @property
+    @cached_property
     def last_colour(self) -> str | None:
         played = [g.colour for g in self.games if g.colour is not None]
         return played[-1] if played else None

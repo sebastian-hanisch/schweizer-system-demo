@@ -7,8 +7,7 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 
-from ss_blossom import NoValidPairingError
-from ss_engine import apply_round, pair_round
+from ss_engine import NoValidPairingError, apply_round, pair_round
 from ss_model import Player
 
 BASE_RATING = 2000.0
@@ -35,7 +34,7 @@ def generate_tournament(n_players: int, n_rounds: int, seed: int) -> TournamentS
     rounds = []
     for rnd in range(1, n_rounds + 1):
         try:
-            result = pair_round(players, rnd)
+            result = pair_round(players, rnd, total_rounds=n_rounds)
         except NoValidPairingError:
             break
         white_wins = {}

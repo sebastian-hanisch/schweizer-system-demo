@@ -5,10 +5,15 @@ heruntergeladene Windows-.exe; CI: das Linux-x86_64-Release, s. .github/workflow
 sonst werden diese Tests übersprungen (`skipif`), damit die restliche Suite auch offline läuft.
 
 **Ehrlicher, gemessener Befund** (nicht behauptet, siehe README/project_turnierplanung_dag_scoping.md):
-bei zufälligen Mehrrundenturnieren stimmt diese Engine in ca. 66 % der Fälle exakt mit bbpPairings
-überein (absolute Kriterien C1-C3 IMMER korrekt; Qualitätskriterien C6-C21 gute Näherung, keine
-vollständige Nachbildung von bbpPairings' undokumentierter interner Gewichtsstaffelung). Der Test
-unten prüft genau diese gemessene Quote mit Sicherheitsmarge, nicht 100 % Übereinstimmung.
+seit der Umstellung auf die wörtliche Transposition/Tausch-Suche MIT ECHTEM BACKTRACKING (Art. 3+4
+des Regeltexts) UND der Behebung mehrerer konkreter, gegen `bbpPairings.exe` gefundener Bugs (u. a.
+[C5]/[C9] fehlten in der Freilos-Auswahl komplett; MDPs wurden nicht nach Art. 1.2 sortiert
+weitergereicht, was Art. 4.4s Limbo-Regel verkehrt herum greifen ließ; die [C3]-Spitzenreiter-
+Ausnahme verlangte fälschlich BEIDE statt MINDESTENS EINEN Spitzenreiter; "Spitzenreiter" (Art. 1.8)
+wurde als Gleichstand mit dem aktuellen Höchststand statt als Schwelle von 50 % der maximal
+MÖGLICHEN Punktzahl behandelt) stimmt diese Engine in ca. 98 % der Fälle exakt mit bbpPairings
+überein (absolute Kriterien C1-C3 IMMER korrekt). Der Test unten prüft genau diese gemessene Quote
+mit Sicherheitsmarge, nicht 100 % Übereinstimmung.
 """
 
 from __future__ import annotations
@@ -101,4 +106,4 @@ def test_measured_agreement_rate_on_random_multiround_tournaments():
                     matched += 1
     assert total > 30, "zu wenige vergleichbare Runden erzeugt - Testkonfiguration prüfen"
     rate = matched / total
-    assert rate >= 0.55, f"Übereinstimmungsrate {rate:.1%} liegt unter der dokumentierten Marke (~66%, Marge nach unten)"
+    assert rate >= 0.90, f"Übereinstimmungsrate {rate:.1%} liegt unter der dokumentierten Marke (~98%, Marge nach unten)"
