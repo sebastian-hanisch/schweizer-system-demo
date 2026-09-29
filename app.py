@@ -28,8 +28,8 @@ st.set_page_config(page_title="Schweizer System – Sebastian Hanisch", layout="
 
 
 @st.cache_data(show_spinner="Turnier wird nach dem echten FIDE-Dutch-Regelwerk gepaart ...")
-def _tournament(n_players, n_rounds, seed):
-    return generate_tournament(n_players, n_rounds, seed)
+def _tournament(n_players, n_rounds, seed, engine_mode):
+    return generate_tournament(n_players, n_rounds, seed, engine_mode=engine_mode)
 
 
 st.title("♟️ Schweizer System (FIDE Dutch System)")
@@ -40,7 +40,9 @@ K.-o.-System (Stück 2) nicht ganz auflösen: eine **feste, kleine Rundenzahl**,
 Teilnehmer viele Partien spielen. Diese Demo baut den Paarungsalgorithmus **nach dem echten FIDE-Regelwerk**
 (C.04.3, "Dutch System") nach - alle 21 Kriterien (C1-C21), Farbzuteilung, Freilos-Regeln - und prüft ihn direkt
 gegen [bbpPairings](https://github.com/BieremaBoyzProgramming/bbpPairings), die offizielle, FIDE-anerkannte
-Referenz-Engine.
+Referenz-Engine. In der Seitenleiste lässt sich zwischen zwei Paarungs-Engines umschalten - Schritt-für-Schritt
+erklärbar nach dem Regeltext, oder exakt nach bbpPairings' eigenem Mechanismus (siehe "Wie genau ist die
+Nachbildung wirklich?" unten für den Unterschied).
 """
 )
 st.caption(
@@ -89,10 +91,20 @@ with st.sidebar:
     seed = st.number_input("Zufalls-Seed (Ratings + Partieausgänge)", *bounds("seed_input"), key="seed_input", step=1)
     st.button("🎲 Neues Turnier auslosen", width="stretch", on_click=randomize_seed)
 
-sync_query_params(n_players, n_rounds, seed)
+    st.divider()
+    st.header("🔀 Paarungs-Engine")
+    engine_mode = st.radio(
+        "Wie wird gepaart?",
+        options=list(C.ENGINE_MODE_LABELS.keys()),
+        format_func=lambda k: C.ENGINE_MODE_LABELS[k],
+        key="engine_mode_radio",
+    )
+    st.caption(C.ENGINE_MODE_HELP[engine_mode])
+
+sync_query_params(n_players, n_rounds, seed, engine_mode)
 
 n_players, n_rounds, seed = int(n_players), int(n_rounds), int(seed)
-tournament = _tournament(n_players, n_rounds, seed)
+tournament = _tournament(n_players, n_rounds, seed, engine_mode)
 rows = standings(tournament.players, tournament.ratings)
 
 if len(tournament.rounds) < n_rounds:
@@ -124,26 +136,44 @@ st.subheader("📐 Wie genau ist die Nachbildung wirklich?")
 st.markdown(
     """
 **Ehrlich gemessen, nicht behauptet**: die absoluten Kriterien (C1-C3, "zwei Spieler treffen nie zweimal
-aufeinander" usw.) gelten in dieser Demo **beweisbar immer** - eine verbotene Paarung wird nie als Kandidat
-gebildet. Für die *Qualitätskriterien* (C6-C21, z. B. "wer floatet, wenn eine Bracket nicht aufgeht") wurde die
-Engine direkt gegen **bbpPairings** (die offizielle, FIDE-anerkannte Referenz-Engine) auf hunderten zufälligen
-Testrunden geprüft:
+aufeinander" usw.) gelten in **beiden** Modi **beweisbar immer** - eine verbotene Paarung wird nie als
+Kandidat gebildet. Für die *Qualitätskriterien* (C6-C21, z. B. "wer floatet, wenn eine Bracket nicht
+aufgeht") wurde jede Engine direkt gegen **bbpPairings** (die offizielle, FIDE-anerkannte Referenz-Engine)
+auf tausenden zufälligen Testrunden geprüft - die beiden Modi liegen hier bewusst unterschiedlich, s. u.:
 """
 )
 mc1, mc2 = st.columns(2)
-mc1.metric("Exakte Übereinstimmung (Qualitätskriterien)", "~98 %", help="Gemessen an zufälligen Mehrrundenturnieren, 4-16 Spieler, 1-4 Runden (1427 Vergleiche) - auf einer bewusst härteren Stichprobe (6-19 Spieler, bis 6 Runden) ~92 %. Siehe README für die vollständige Methodik.")
-mc2.metric("Übereinstimmung bei Runde 1 (frisches Feld)", "100 %", help="Die 'obere Hälfte gegen untere Hälfte'-Standardaufteilung wird exakt nachgebildet.")
-st.markdown(
-    """
+if engine_mode == C.ENGINE_MODE_RULESET:
+    mc1.metric("Exakte Übereinstimmung (Qualitätskriterien)", "~99 %", help="Gemessen an zufälligen Mehrrundenturnieren, 4-16 Spieler, 1-4 Runden (1430 Vergleiche) - auf einer bewusst härteren Stichprobe (6-19 Spieler, bis 6 Runden) ~97 %. Siehe README für die vollständige Methodik.")
+    mc2.metric("Übereinstimmung bei Runde 1 (frisches Feld)", "100 %", help="Die 'obere Hälfte gegen untere Hälfte'-Standardaufteilung wird exakt nachgebildet.")
+    st.markdown(
+        """
 Die eingebaute Vorausschau ([C8], "erreicht die nächste Bracket ihr eigenes Maximum?") prüft per echter,
-beliebig tiefer Rekursion die GESAMTE restliche Kette, nicht nur den nächsten Schritt. Der Rest der Abweichung
-wurde direkt aus bbpPairings' eigenem Quellcode heraus untersucht: es sind echte Gleichstände zwischen mehreren,
-nach allen 21 Kriterien exakt gleich bewerteten Kandidaten - die Referenz-Engine löst SOLCHE Reste über ein
-mehrstufiges Neu-Lösen mit angepassten Kantengewichten, nicht über eine einzelne feste Regel. Eine aus diesem
-Mechanismus abgeleitete Heuristik hilft messbar (98,2 %/92,0 % statt 97,8 %/86,7 % vorher), ist aber
-nachweislich nicht in jedem Einzelfall korrekt - offen ausgewiesen, keine verschwiegene Lücke.
-"""
-)
+beliebig tiefer Rekursion die GESAMTE restliche Kette, nicht nur den nächsten Schritt. Der größere Teil der
+früheren Abweichung war gar kein Tie-Break-Problem, sondern eine reine Suchbreiten-Grenze: bbpPairings'
+tatsächliche Wahl fehlte schlicht im enumerierten Kandidatensatz - großzügigeres Anheben der Such-Deckel hob
+die Übereinstimmung deutlich. Der kleine verbliebene Rest sind echte Gleichstände zwischen mehreren, nach
+allen 21 Kriterien exakt gleich bewerteten Kandidaten - die Referenz-Engine löst SOLCHE Reste über ein
+einziges, für die GANZE Runde (nicht nur eine Bracket) fortgeführtes gewichtetes Matching-Objekt - ein
+grundlegend anderer Mechanismus als die Bracket-für-Bracket-Suche hier (Art. 3+4 wörtlich). Ein Portierungs-
+versuch DIESES Mechanismus als nachträglicher Tie-Break auf der Bracket-für-Bracket-Architektur brachte
+GEMESSEN keinen Gewinn - erst der **vollständige** Nachbau (⚙️ Einstellungen → bbpPairings-treuer Modus)
+schließt die Lücke, dafür ohne die Schritt-für-Schritt-Nachvollziehbarkeit dieses Modus hier."""
+    )
+else:
+    mc1.metric("Exakte Übereinstimmung (Qualitätskriterien)", "100 %", help="Gemessen an zufälligen Mehrrundenturnieren, 4-16 Spieler, 1-4 Runden (1430 Vergleiche) UND einer bewusst härteren Stichprobe (6-19 Spieler, bis 6 Runden, 1994 Vergleiche) - beide exakt 100 %. Siehe README für die vollständige Methodik.")
+    mc2.metric("Übereinstimmung bei Runde 1 (frisches Feld)", "100 %", help="Wie bei jeder Runde in diesem Modus: exakt.")
+    st.markdown(
+        """
+Dieser Modus bildet nicht den FIDE-Regeltext nach, sondern bbpPairings' **eigenen internen Mechanismus**:
+EIN einziges gewichtetes Matching-Objekt wird für die GESAMTE Runde (alle Spieler, nicht nur eine Bracket)
+einmal angelegt und dann bracket-für-bracket mit inkrementell angepassten Kantengewichten weitergelöst -
+direkt aus dem geklonten `bbpPairings`-Quellcode portiert (`computeEdgeWeight`, `dutch.cpp`) und gegen die
+Referenz-Engine verifiziert. Der Preis für die 100-%-Exaktheit: die einzelne Paarungsentscheidung ("warum
+spielt X gegen Y") ist hier NICHT mehr in einzelne, für sich nachvollziehbare Regelschritte zerlegbar wie im
+Regeltext-Modus, sondern das Ergebnis eines globalen Optimierungslaufs - ein bewusster Erklärbarkeit-gegen-
+Exaktheit-Trade-off, kein "besser" oder "schlechter" an sich."""
+    )
 
 st.markdown("---")
 
@@ -162,20 +192,24 @@ statt einer Schätzung), und geht erst bei Fehlschlag zum nächsten Kandidaten �
 $C_{10}, ..., C_{21}$ ist dabei eine eigenständige, kleine ganze Zahl - der Vergleich ist ein direkter
 lexikografischer Tupel-Vergleich, kein gemischt-radix-Kodiertrick nötig.
 
-**Warum nicht ein globales Matching?** Eine frühere Fassung dieser Demo löste die ganze Runde als EIN
+**Warum nicht (nur) ein globales Matching?** Eine frühere Fassung dieser Demo löste die ganze Runde als EIN
 gewichtetes allgemeines Matching (wie [`weighted-blossom-demo`](https://github.com/sebastian-hanisch/weighted-blossom-demo)),
-weil die Referenz-Engine bbpPairings das intern so tut. Das erreichte ~66 % Übereinstimmung mit bbpPairings,
-war aber eine Nachbildung von bbpPairings' eigener Implementierungsstrategie, nicht des FIDE-Regeltexts
-selbst. Die direkte Umsetzung von Art. 3+4 (Transposition/Tausch statt globalem Matching) mit echtem
-Backtracking hob die Übereinstimmung auf ~98 % - siehe README für die vollständige Herleitung. Für die
-verbliebene ~2-8 %-Lücke (echte Gleichstände) wurde bbpPairings' Quellcode noch einmal gezielt gelesen, um NUR
-das Grundprinzip eines EINZELNEN Tie-Break-Kriteriums (`_exchange_cost`) zu übernehmen - die Bracket-für-
-Bracket-Architektur nach Art. 3+4 bleibt dabei die tragende Suche, kein Rückbau zum globalen Matching.
+weil die Referenz-Engine bbpPairings das intern so tut - erreichte damals aber nur ~66 % Übereinstimmung, weil
+es eine grobe Annäherung an bbpPairings' Implementierungsstrategie war, nicht deren treue Nachbildung. Die
+direkte Umsetzung von Art. 3+4 (Transposition/Tausch statt globalem Matching) mit echtem Backtracking hob die
+Übereinstimmung auf ~99 %/97 % - der **Regeltext-Modus** hier, weiterhin Standard, weil jeder Schritt einzeln
+nachvollziehbar bleibt (der pädagogische Kern dieser Demo). Der verbliebene kleine Rest sind echte
+Gleichstände, die bbpPairings über ein einziges, rundenweit fortgeführtes gewichtetes Matching-Objekt löst -
+kein im Regeltext stehender Mechanismus. Dieser wurde inzwischen VOLLSTÄNDIG (nicht nur als Tie-Break-Zusatz)
+nachgebaut und gegen die Referenz verifiziert: 100 % exakte Übereinstimmung, als eigener **bbpPairings-treuer
+Modus** wählbar (⚙️ Einstellungen) - auf Kosten der Nachvollziehbarkeit einzelner Paarungsentscheidungen, s.
+"Wie genau ist die Nachbildung wirklich?" oben.
 
 **Elo-Erwartungswert** (Simulation der Turnierverläufe): $E_A = 1/(1+10^{(R_B-R_A)/400})$.
 
-Implementiert in `ss_engine.py` (Bracket-Verkettung), `ss_bracket.py` (Transposition/Tausch-Suche),
-`ss_quality.py` (Kriterien C10-C21) und `ss_colour.py` (Farbzuteilung).
+Regeltext-Modus implementiert in `ss_engine.py` (Bracket-Verkettung), `ss_bracket.py` (Transposition/Tausch-
+Suche) und `ss_quality.py` (Kriterien C10-C21); bbpPairings-treuer Modus in `ss_matching_engine.py` (ein
+einziges rundenweites Matching-Objekt) - beide nutzen `ss_colour.py` (Farbzuteilung) gemeinsam.
         """
     )
 

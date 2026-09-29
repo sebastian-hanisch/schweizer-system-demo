@@ -17,12 +17,16 @@ class SettingSpec:
     default: object
     lo: Optional[float] = None
     hi: Optional[float] = None
+    allowed: Optional[frozenset] = None  # für enum-artige (String-)Werte statt numerischer lo/hi-Grenzen
 
 
 SETTING_SPECS = {
     "n_players_slider": SettingSpec("n", int, C.DEFAULT_N_PLAYERS, C.N_PLAYERS_MIN, C.N_PLAYERS_MAX),
     "n_rounds_slider": SettingSpec("rounds", int, C.DEFAULT_N_ROUNDS, C.N_ROUNDS_MIN, C.N_ROUNDS_MAX),
     "seed_input": SettingSpec("seed", int, C.DEFAULT_SEED, 0, 2_000_000_000),
+    "engine_mode_radio": SettingSpec(
+        "engine", str, C.ENGINE_MODE_DEFAULT, allowed=frozenset({C.ENGINE_MODE_RULESET, C.ENGINE_MODE_MATCHING})
+    ),
 }
 
 
@@ -51,17 +55,21 @@ def load_permalink_settings():
                     value = max(spec.lo, value)
                 if spec.hi is not None:
                     value = min(spec.hi, value)
+                if spec.allowed is not None and value not in spec.allowed:
+                    continue  # unbekannter/manipulierter Wert - beim Default bleiben statt einen
+                    # ungültigen Modus/Zustand zu setzen
                 st.session_state[state_key] = value
             except (ValueError, TypeError):
                 pass
     st.session_state["permalink_loaded"] = True
 
 
-def sync_query_params(n_players, n_rounds, seed):
+def sync_query_params(n_players, n_rounds, seed, engine_mode):
     try:
         st.query_params["n"] = str(int(n_players))
         st.query_params["rounds"] = str(int(n_rounds))
         st.query_params["seed"] = str(int(seed))
+        st.query_params["engine"] = str(engine_mode)
     except Exception:
         pass
 

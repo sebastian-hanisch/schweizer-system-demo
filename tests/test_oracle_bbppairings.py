@@ -11,9 +11,13 @@ des Regeltexts) UND der Behebung mehrerer konkreter, gegen `bbpPairings.exe` gef
 weitergereicht, was Art. 4.4s Limbo-Regel verkehrt herum greifen ließ; die [C3]-Spitzenreiter-
 Ausnahme verlangte fälschlich BEIDE statt MINDESTENS EINEN Spitzenreiter; "Spitzenreiter" (Art. 1.8)
 wurde als Gleichstand mit dem aktuellen Höchststand statt als Schwelle von 50 % der maximal
-MÖGLICHEN Punktzahl behandelt) stimmt diese Engine in ca. 98 % der Fälle exakt mit bbpPairings
-überein (absolute Kriterien C1-C3 IMMER korrekt). Der Test unten prüft genau diese gemessene Quote
-mit Sicherheitsmarge, nicht 100 % Übereinstimmung.
+MÖGLICHEN Punktzahl behandelt) UND (spätere Sitzung, 2026-09-28) dem Anheben der Suchbreiten-Deckel
+`MAX_ALTERNATIVES`/`MAX_PER_MDP_PERM`/`MAX_PAIRABLE_MDP_SETS`/`MAX_RAW_ATTEMPTS` in `ss_bracket.py`
+(der verbliebene Rest-Mismatch-Anteil war KEIN Tie-Break-Problem, sondern eine echte Suchbreiten-
+Grenze - bbpPairings' tatsächliche Wahl fehlte schlicht im enumerierten Kandidatensatz) stimmt diese
+Engine in ca. 99-100 % der Fälle exakt mit bbpPairings überein (absolute Kriterien C1-C3 IMMER
+korrekt). Der Test unten prüft genau diese gemessene Quote mit Sicherheitsmarge, nicht 100 %
+Übereinstimmung.
 """
 
 from __future__ import annotations
@@ -106,4 +110,4 @@ def test_measured_agreement_rate_on_random_multiround_tournaments():
                     matched += 1
     assert total > 30, "zu wenige vergleichbare Runden erzeugt - Testkonfiguration prüfen"
     rate = matched / total
-    assert rate >= 0.90, f"Übereinstimmungsrate {rate:.1%} liegt unter der dokumentierten Marke (~98%, Marge nach unten)"
+    assert rate >= 0.97, f"Übereinstimmungsrate {rate:.1%} liegt unter der dokumentierten Marke (~99-100%, Marge nach unten)"

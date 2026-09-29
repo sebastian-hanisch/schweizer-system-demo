@@ -9,6 +9,29 @@ N_ROUNDS_MIN, N_ROUNDS_MAX = 1, 9
 DEFAULT_SEED = 1
 DEFAULT_WIN_PROB = 0.55  # P(höher gesetzter Spieler gewinnt) im Simulationsmodell
 
+# --- Engines (siehe ss_scenario.generate_tournament) --------------------------------------------
+ENGINE_MODE_RULESET = "ruleset"
+ENGINE_MODE_MATCHING = "matching"
+ENGINE_MODE_DEFAULT = ENGINE_MODE_RULESET
+ENGINE_MODE_LABELS = {
+    ENGINE_MODE_RULESET: "📜 Regeltext-Modus (Art. 3+4, Schritt für Schritt erklärbar)",
+    ENGINE_MODE_MATCHING: "🎯 bbpPairings-treuer Modus (exaktes Matching, 100 % Übereinstimmung)",
+}
+ENGINE_MODE_HELP = {
+    ENGINE_MODE_RULESET: (
+        "Bracket-für-Bracket, wörtliche Transposition/Tausch-Suche nach FIDE Art. 3+4 - jeder Schritt "
+        "einzeln nachvollziehbar. Gemessen ca. 99 %/97 % exakte Übereinstimmung mit bbpPairings; der "
+        "kleine Rest sind echte Gleichstände, die die Referenz über einen eigenen, nicht im Regeltext "
+        "stehenden internen Mechanismus auflöst (siehe unten)."
+    ),
+    ENGINE_MODE_MATCHING: (
+        "Bildet bbpPairings' EIGENEN Algorithmus nach: EIN einziges, rundenweit fortgeführtes gewichtetes "
+        "Matching-Objekt statt einer Bracket-für-Bracket-Suche. Gemessen 100 % exakte Übereinstimmung - "
+        "aber die einzelne Paarungsentscheidung ist NICHT mehr in nachvollziehbare Einzelschritte "
+        "zerlegbar, sondern das Ergebnis eines globalen Optimierungslaufs."
+    ),
+}
+
 # --- Presets -----------------------------------------------------------------
 _BASE = {"n_players": DEFAULT_N_PLAYERS, "n_rounds": DEFAULT_N_ROUNDS, "seed": DEFAULT_SEED}
 PRESETS = {

@@ -114,3 +114,23 @@ def test_allocate_same_unresolved_strong_preference_grants_to_higher_rank():
     pairing = allocate(higher, lower)
     assert pairing.black == higher.rank
     assert pairing.white == lower.rank
+
+
+def test_allocate_same_unresolved_preference_grants_to_higher_score_not_just_higher_rank():
+    # Regressionstest (echter, gegen bbpPairings.exe gefundener Bug, project_turnierplanung_dag_
+    # scoping.md 2026-09-29): "höherrangig" in Art. 5.2.4 bedeutet Art.-1.2-Reihenfolge (Score
+    # absteigend, dann Rang aufsteigend) - NICHT reinen Rangvergleich. bbpPairings' eigenes
+    # `acceleratedScoreRankCompare` (dutch.cpp:488-514/tournament.h:242-254) vergleicht zuerst nach
+    # Score. Mit GLEICHEM Score fallen beide Vergleiche zusammen (deshalb blieb der Fehler in jedem
+    # bisherigen, nur nach Score-Gruppen sortierten Test unbemerkt) - hier bewusst UNTERSCHIEDLICHER
+    # Score (ein aus einer höheren Bracket hereingefloateter Spieler mit besserem Score, aber
+    # SCHLECHTEREM Rang, gegen einen score-niedrigeren mit besserem Rang): beide wollen (mild)
+    # Schwarz, keine gemeinsame Farbhistorie löst den Gleichstand. Der score-HÖHERE (12), nicht der
+    # rang-bessere (4), muss seine Präferenz bekommen.
+    worse_rank_better_score = Player(rank=12, score=2.0, games=(GameRecord(1, 30, "b", 1.0, counted_as_bye=False), GameRecord(2, 31, "w", 1.0, counted_as_bye=False)))
+    better_rank_worse_score = Player(rank=4, score=1.0, games=(GameRecord(1, 32, "b", 0.0, counted_as_bye=False), GameRecord(2, 33, "w", 1.0, counted_as_bye=False)))
+    assert classify(worse_rank_better_score).strength == MILD and classify(worse_rank_better_score).colour == BLACK
+    assert classify(better_rank_worse_score).strength == MILD and classify(better_rank_worse_score).colour == BLACK
+    pairing = allocate(better_rank_worse_score, worse_rank_better_score)
+    assert pairing.black == worse_rank_better_score.rank
+    assert pairing.white == better_rank_worse_score.rank

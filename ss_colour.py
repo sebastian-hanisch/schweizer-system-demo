@@ -87,7 +87,17 @@ def allocate(a: Player, b: Player) -> Pairing:
     # 5.2.4: beide wollen (nach 5.2.1-5.2.3 unaufgelöst) dieselbe Farbe - der höherrangige Spieler
     # bekommt SEINE (=ihre gemeinsame) Präferenz erfüllt. NICHT dieselbe Regel wie 5.2.5 (die gilt
     # nur, wenn WEDER Spieler überhaupt eine Präferenz hat, s. Aufruf oben in 5.2.1).
-    higher, lower = (a, b) if a.rank < b.rank else (b, a)
+    #
+    # "Höherrangig" heißt hier Art.-1.2-Reihenfolge (Score absteigend, dann Rang aufsteigend) - NICHT
+    # reiner Rangvergleich. Echter, gegen `bbpPairings.exe` gefundener Bug (project_turnierplanung_
+    # dag_scoping.md, 2026-09-29): bei GLEICHEM Score (z. B. innerhalb einer homogenen Bracket)
+    # stimmen beide Vergleiche überein, weshalb der Fehler durch KEINEN bisherigen Sweep auffiel (der
+    # nur die PaarungsSTRUKTUR prüft, nie die Farbzuteilung) - bei UNTERSCHIEDLICHEM Score (z. B. ein
+    # aus einer höheren Bracket hereingefloateter MDP gegen einen score-niedrigeren Residenten)
+    # entscheidet bbpPairings' eigenes `acceleratedScoreRankCompare` NACHWEISLICH nach Score ZUERST,
+    # Rang nur als Gleichstand-Kriterium (dutch.cpp:488-514, tournament.h:242-254) - reiner
+    # Rangvergleich griff dann VERKEHRT herum.
+    higher, lower = (a, b) if (-a.score, a.rank) < (-b.score, b.rank) else (b, a)
     if pa.colour == WHITE:
         return Pairing(white=higher.rank, black=lower.rank)
     return Pairing(white=lower.rank, black=higher.rank)

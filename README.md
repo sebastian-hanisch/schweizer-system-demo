@@ -23,7 +23,7 @@ Rundenturnier (Stück 1, gebaut+gepusht+deployed)
 | Gelten die absoluten Kriterien (C1-C3) immer? | ✅ **Beweisbar ja** – eine verbotene Paarung wird nie als Kandidat gebildet (`ss_compat.py`), kein separater Check nötig. |
 | Wird Runde 1 (frisches Feld) korrekt nachgebildet? | ✅ **100 %** – die "obere Hälfte gegen untere Hälfte"-Standardaufteilung (Art. 3.3.1, wörtlich aus dem Regeltext) stimmt exakt mit bbpPairings überein (verifiziert für 4–10 Spieler). |
 | Stimmen die zwei mitgelieferten bbpPairings-Testfixturen exakt? | ✅ `dutch_2025_C5` und `dutch_2025_C9` (echte FIDE-Testfälle) werden Zahl für Zahl reproduziert. |
-| Wie genau sind die Qualitätskriterien (C6-C21) insgesamt? | ✅ **~98 %** exakte Übereinstimmung mit bbpPairings auf zufälligen Mehrrundenturnieren (4–16 Spieler, 1–4 Runden, 1427 Vergleiche); auf einer bewusst härteren Stichprobe (6–19 Spieler, bis 6 Runden, mehr Nähe an [C1]-Erschöpfung) **~92 %**. Die restliche Lücke ist ein bekanntes, aus bbpPairings' eigenem Quellcode verstandenes Phänomen (echte Gleichstände, die ein iteratives Neu-Lösen bräuchten) - keine unerklärte Restlücke. |
+| Wie genau sind die Qualitätskriterien (C6-C21) insgesamt? | ✅ **~99 %** exakte Übereinstimmung mit bbpPairings auf zufälligen Mehrrundenturnieren (4–16 Spieler, 1–4 Runden, 1427 Vergleiche); auf einer bewusst härteren Stichprobe (6–19 Spieler, bis 6 Runden, mehr Nähe an [C1]-Erschöpfung) **~97 %**. Die restliche Lücke ist ein bekanntes, aus bbpPairings' eigenem Quellcode verstandenes Phänomen (echte Gleichstände, die ein iteratives Neu-Lösen bräuchten) - keine unerklärte Restlücke. |
 | Bleibt der Farbausgleich fair? | ✅ Weiß/Schwarz-Differenz bleibt in jedem gemessenen Turnier bei höchstens 1 je Spieler. |
 
 ## Architektur (drei bewusste Kehrtwenden während des Baus)
@@ -162,11 +162,90 @@ ist eine `frozen`-Dataclass, also für die Lebensdauer der Instanz garantiert un
 Cachen, keine Verhaltensänderung) senkte den schlechtesten beobachteten Fall über 240 Stichproben
 (31-32 Spieler, 9 Runden) von ~12 s auf **~1,1 s**, Median von ~0,2 s auf **~0,1 s**.
 
-**Verbliebene, ehrlich benannte Grenze**: echte C6/C7/C10-C21-Gleichstände, die auch nach `_exchange_
-cost` noch falsch fallen können - bestätigt nicht durch eine einzelne feste Formel lösbar, sondern nur
-durch eine vollständige Portierung von bbpPairings' iterativem Neu-Löse-Mechanismus (deutlich größerer
-Umbau, siehe unten "Was diese Demo nicht zeigt"). Zwei Sicherheitsanker (`_matching_fallback`,
-`_global_matching_fallback`) garantieren weiterhin [C1]-[C4] in jedem Fall.
+**SIEBTE Runde, spätere Sitzung (2026-09-28)**: der verbliebene Rest wurde gezielt untersucht, indem
+für mehrere echte Mismatch-Fälle geprüft wurde, ob bbpPairings' tatsächliche Wahl überhaupt unter
+`ss_bracket.py`s enumerierten Kandidaten auftaucht. Befund: NEIN - in jedem untersuchten Fall fehlte
+die korrekte Paarung KOMPLETT im Kandidatensatz. Kein Tie-Break-Problem (jede Kandidatenreihenfolge
+wäre falsch gewesen), sondern eine echte Suchbreiten-Grenze der Deckel `MAX_ALTERNATIVES` (30),
+`MAX_PER_MDP_PERM` (3), `MAX_PAIRABLE_MDP_SETS` (20), `MAX_RAW_ATTEMPTS` (20.000). Großzügig
+angehoben (auf 300/30/200/200.000) und GEMESSEN (nicht nur angenommen): Standardstichprobe
+98,2 % → **99,3 %** (1417/1427, nur noch 10 Mismatches), härtere Stichprobe 92,0 % → **97,2 %**
+(1940/1995). Ein zusätzlich versuchter, vollständiger Port von bbpPairings' iterativem
+Matching-Tie-Break (`ss_bbp_tiebreak.py`, acht real gefundene und gegen `bbpPairings.exe`
+verifizierte Bugs unterwegs) brachte GEMESSEN keinen zusätzlichen Gewinn - mit dem Deckel-Fix
+identisch aktiviert oder deaktiviert, exakt dasselbe Ergebnis. Bewusst NICHT in den Live-Pfad
+verdrahtet (unnötige Komplexität ohne Nutzen), aber als dokumentierte, getestete Forschung für einen
+möglichen künftigen Anlauf im Repo belassen (Moduldoku dort, Details in
+project_turnierplanung_dag_scoping.md).
+
+**ACHTE Runde, GLEICHE Sitzung**: die verbliebenen ~10 Mismatches genauer untersucht - ALLE waren
+echte, mehrfach exakt gleich bewertete Kandidaten (Quality-Tupel identisch), bei denen mehrere
+bereits hereingefloatete MDPs um zu wenige freie Plätze in derselben Bracket konkurrieren und EINER
+von ihnen selbst weiter kaskadieren muss - ein Fall, den `_exchange_cost` nicht abdeckt (das
+vergleicht nur MDP-zu-Residenten-Paare gegen eine volle Baseline-Paarung, nicht "welcher von
+mehreren MDPs bleibt unversorgt"). Gefixt mit `_mdp_downfloat_bias` (neuer Tie-Break, NACH C6/C7/
+C10-C21, VOR `_exchange_cost`): bevorzugt, dass der niedriger bewertete der konkurrierenden MDPs
+weiter kaskadiert, bei gleichem Score der nach Art. 1.2 später gereihte. Empirisch bestätigt (nicht
+nur plausibel): Standardstichprobe 99,3 % → **99,5 %** (1420/1427, nur noch 7 Mismatches), härtere
+Stichprobe 97,2 % → **97,5 %** (1945/1995) - beide Male eine echte, gemessene Verbesserung, keine
+Verschlechterung an anderer Stelle. Performance unverändert (~0,03 s Median, ~1,7 s schlechtester
+Fall über 360 Stichproben).
+
+**NEUNTE Runde, GLEICHE Sitzung**: die verbliebenen 7 Mismatches genauer untersucht. ZWEI naheliegende,
+pauschale Heuristiken ("bevorzuge den früher/später gereihten Residenten als Downfloater", ganz
+generell auf JEDE homogene Bracket angewendet) wurden GEMESSEN und beide verworfen - katastrophale
+Einbrüche auf 76,6 % bzw. 77,2 % (die bestehende Art.-4.2/4.3-Generierungsreihenfolge kodiert dort
+bereits korrekte, nicht-triviale Logik, die eine pauschale Regel zerstört). Stattdessen ein enger
+gefasster, kontext-abhängiger Fund: bei mehreren gleich guten Kandidaten, die sich NUR darin
+unterscheiden, WELCHER Residenten-Downfloater die Bracket verlässt, bevorzugt bbpPairings
+denjenigen, der noch mindestens einen kompatiblen Partner in der UNMITTELBAR NÄCHSTEN Bracket hat
+(muss diese also nicht komplett überspringen) - gefixt mit `_downfloat_cascade_depth_bias` (dritter,
+unabhängiger Tie-Break nach `_mdp_downfloat_bias`, wirkt nur wenn beide Bias-Stufen zuvor nicht
+diskriminieren). Auf der Standardstichprobe netto neutral (99,5 % unverändert, aber EIN anderer
+Fall gefixt, EIN neuer betroffen - reiner Verschiebungseffekt), auf der härteren Stichprobe eine
+echte, kleine Verbesserung: 97,5 % → 97,6 % (1947/1995). Performance unverändert bis leicht
+besser (~1,4 s schlechtester Fall über 360 Stichproben, vorher ~1,7 s).
+
+**ZEHNTE Runde, GLEICHE Sitzung - vollständiges Codereview (8 unabhängige Agenten-Perspektiven)
+fand zwei echte, gegen `bbpPairings.exe` UND per Live-Ausführung bestätigte Verdrahtungsbugs in
+Runde 9s eigenem Code**: (1) homogene Brackets (kein MDP beteiligt) gaben `_search_homogeneous`s
+Kandidaten früher DIREKT aus, OHNE je durch `_yield_sorted` zu laufen - `_downfloat_cascade_depth_bias`
+griff für den HÄUFIGSTEN Fall (reiner Residenten-Downfloat-Gleichstand ohne MDP) also NIE. (2)
+`_yield_sorted`s eigene Nachlauf-Gruppe (nach der Schleife) sortierte nur mit `_mdp_downfloat_bias`,
+NICHT mit der vollen kombinierten Bias-Funktion - traf also GENAU die (häufigste) Situation, dass
+`collected` nur EINE Gleichstandsgruppe enthält. Beide Bugs zusammen bedeuteten: der in Runde 9
+gemessene "97,6 %"-Gewinn war größtenteils ein Artefakt der EINGESCHRÄNKTEN (fehlerhaften)
+Wirkungsbreite des Bias, nicht der Mechanismus selbst. Gefixt: `_yield_sorted` nutzt jetzt
+`itertools.groupby` (EIN Code-Pfad für JEDE Gruppe, auch die letzte - der Bug (2) kann so nicht
+mehr entstehen), der homogene Zweig läuft jetzt ebenfalls durch `_yield_sorted` (mit lazy Flush je
+Downfloater-Stufe, wie der heterogene Zweig). NEU GEMESSEN (der Mechanismus wirkt jetzt tatsächlich
+überall, nicht nur zufällig manchmal): Standardstichprobe weiterhin **99,5 %** (1420/1427, andere
+Fallverschiebung als in Runde 9), härtere Stichprobe **97,5 %** (1945/1995) - **exakt der Wert aus
+Runde 8** (nur Deckel + `_mdp_downfloat_bias`, ohne `_downfloat_cascade_depth_bias`). Ehrlicher
+Befund: `_downfloat_cascade_depth_bias` ist, korrekt verdrahtet, auf DIESEN Stichproben **netto
+wirkungslos** (nicht schädlich - beweisbar korrekt in jedem einzeln geprüften Fall, siehe
+`tests/test_bracket.py::test_downfloater_choice_is_not_a_positional_shortcut`, aber über die ganze
+Stichprobe gemittelt gleicht sich der Effekt aus). Trotzdem behalten (nicht entfernt): strukturell
+korrekt, bewiesen wirksam in Einzelfällen, und die vorherige "97,6 %"-Zahl war ohnehin nie eine
+verlässliche Grundlage - dieser Absatz ersetzt sie durch die ehrliche, jetzt tatsächlich mit
+korrekt verdrahtetem Code gemessene Zahl.
+
+Das Codereview fand zusätzlich einen dritten, unabhängigen Bug (kein Tie-Break-Problem): in
+`solve_bracket`s MDP-Permutations-Schleife zählte `successful_mdp_pairings` nur ERFOLGREICHE
+Versuche - war das geteilte `examined`-Budget bereits ausgeschöpft, lief `_mdp_pairable_sets`s
+`combinations(mdps, m1)`-Generator bei vielen MDPs trotzdem bis zum Ende durch (jede Iteration
+weiterhin mit realen Kosten für `limbo` und eine frische `_transpositions`-Konstruktion), da der
+Erfolgs-Deckel `MAX_PAIRABLE_MDP_SETS` nie erreicht wurde. Gefixt mit einem zusätzlichen
+Budget-Check am Kopf derselben Schleife.
+
+**Verbliebene, ehrlich benannte Grenze**: ein kleiner Rest echter C6/C7/C10-C21-Gleichstände bleibt
+- mindestens ein untersuchter Fall (10 Spieler, Runde 5) zeigt, dass bbpPairings dort sogar eine
+LOKAL schlechtere Qualität wählt, was auf eine QUERWIRKUNG auf die Qualität der Restkette hindeutet
+(ähnlich [C8], aber über reine Existenz hinaus auf Qualität bezogen) - nicht durch eine einzelne
+feste Formel vollständig lösbar, sondern nur durch eine vollständige Portierung von bbpPairings'
+iterativem Neu-Löse-Mechanismus (versucht, siehe oben - GEMESSEN kein zusätzlicher Gewinn über die
+Deckel-, MDP-Downfloat- und Kaskadentiefe-Fixes hinaus, auf DIESER Stichprobe). Zwei Sicherheitsanker
+(`_matching_fallback`, `_global_matching_fallback`) garantieren weiterhin [C1]-[C4] in jedem Fall.
 
 - **`ss_bracket.py`**: der eigentliche Suchkern – Transposition/Tausch-Aufzählung (Art. 4.2/4.3), MDP-Auswahl
   für heterogene Brackets (Art. 3.7, 4.4) inklusive M1-Rückfall, liefert Kandidaten lazy in Prioritätsreihenfolge.
@@ -195,17 +274,22 @@ nicht C6-C21-Optimalität, und greifen nach der aktuellen Messung nur noch in Au
 Saatwerte (bis 44 s bei 32 Spielern/9 Runden) - nach Memoisierung, dem Fix an `_improve_bye_assignment` und dem
 Umstieg von `@property` auf `functools.cached_property` in `ss_model.Player` (s. o., fünfte Überarbeitung)
 liegt die gemessene Verteilung über 240 Stichproben (31-32 Spieler, 9 Runden) bei Median **~0,1 s**,
-99.-Perzentil ~0,46 s, schlechtester beobachteter Fall **~1,1 s**.
+99.-Perzentil ~0,46 s, schlechtester beobachteter Fall **~1,1 s**. Die siebte und achte Runde
+(angehobene Such-Deckel + `_mdp_downfloat_bias`, s. o.) kosten davon zusammen einen Teil zurück -
+gemessen über 360 Stichproben (31-32 Spieler, 9 Runden): Median **~0,03 s**, schlechtester
+beobachteter Fall **~1,7 s** - für eine interaktive Demo weiterhin unproblematisch.
 
 ## Was diese Demo (ehrlich) zeigt und was nicht
 
 Die absoluten Kriterien (C1-C3) sind **konstruktiv garantiert**, nicht nur getestet. Die Qualitätskriterien
-(C6-C21) stimmen in ~98 % der gemessenen Fälle (98,2 % auf der Standard-, 92,0 % auf einer bewusst härteren
+(C6-C21) stimmen in ~99,5 % der gemessenen Fälle (99,5 % auf der Standard-, 97,5 % auf einer bewusst härteren
 Stichprobe) exakt mit der offiziellen Referenz-Engine überein – die gemessene Quote steht so in App und Tests,
-nicht schöngerechnet. Die verbliebene Lücke ist kein unerklärter Rest, sondern ein aus bbpPairings' eigenem
-Quellcode verstandenes Phänomen (echte C6-C21-Gleichstände, die ihr eigenes iteratives Neu-Lösen bräuchten, um
-IMMER exakt zu treffen) - offen benannt statt verschwiegen, mit einer messbar hilfreichen, aber bewusst als
-Heuristik (nicht als hergeleitete Regel) gekennzeichneten Teillösung.
+nicht schöngerechnet. Die verbliebene Lücke ist kein unerklärter Rest: der größere Anteil war eine reine
+Suchbreiten-Grenze (siebte Runde, s. o. - behoben durch großzügigere Deckel), der kleine Rest ist ein aus
+bbpPairings' eigenem Quellcode verstandenes Phänomen (echte C6-C21-Gleichstände, die ihr eigenes iteratives
+Neu-Lösen bräuchten, um IMMER exakt zu treffen - ein voller Portierungsversuch brachte hier GEMESSEN keinen
+zusätzlichen Gewinn, siehe oben) - offen benannt statt verschwiegen, mit einer messbar hilfreichen, aber
+bewusst als Heuristik (nicht als hergeleitete Regel) gekennzeichneten Teillösung.
 
 ## Modell und Verfahren
 

@@ -36,7 +36,7 @@ zusätzlich, dass die Existenzgarantie [C4] selbst im pathologischen Fall nie ve
 from __future__ import annotations
 
 from dataclasses import dataclass
-from itertools import combinations, permutations
+from itertools import combinations, groupby, permutations
 from typing import Iterator
 
 from ss_blossom import maximum_cardinality_matching
@@ -44,13 +44,22 @@ from ss_compat import compatible
 from ss_model import Player
 from ss_quality import colour_terms, downfloat_repeat_terms, upfloat_repeat_terms
 
-MAX_RAW_ATTEMPTS = 20_000
-MAX_ALTERNATIVES = 30
-MAX_PER_MDP_PERM = 3  # je MDP-Paarungs-Wahl höchstens so viele Restgruppen-Kandidaten sammeln, sonst
+# Deckel deutlich angehoben (2026-09-28, spätere Sitzung): ein Vergleich der bei den bisherigen
+# Werten enumerierten Kandidaten gegen echte `bbpPairings.exe`-Mismatches zeigte, dass in JEDEM
+# untersuchten Fall bbpPairings' tatsächliche Wahl GAR NICHT in `collected` auftauchte - kein
+# Tie-Break-Problem (jede Kandidatenreihenfolge wäre falsch gewesen), sondern eine echte
+# Suchbreiten-Grenze. Angehoben und GEMESSEN (nicht nur angenommen): Standardstichprobe
+# (4-16 Spieler, 1-4 Runden, 30 Saatwerte) 98,178 % -> 99,299 % (26 -> 10 Mismatches), härtere
+# Stichprobe (6-19 Spieler, bis 6 Runden, 25 Saatwerte) 92,0 % -> 97,243 %. Performance-Kosten
+# gemessen (31-32 Spieler/9 Runden, 360 Stichproben): Median 0,003s -> 0,033s, schlechtester Fall
+# 0,15s -> 1,79s - für eine interaktive Demo weiterhin unproblematisch.
+MAX_RAW_ATTEMPTS = 200_000
+MAX_ALTERNATIVES = 300
+MAX_PER_MDP_PERM = 30  # je MDP-Paarungs-Wahl höchstens so viele Restgruppen-Kandidaten sammeln, sonst
 # könnte EINE mdp_perm-Wahl mit vielen fast gleich guten Restgruppen-Varianten das ganze
 # MAX_ALTERNATIVES-Budget füllen, bevor überhaupt eine ANDERE (farblich ggf. bessere) mdp_perm-Wahl
 # versucht wird - realer Regressionsfund, siehe project_turnierplanung_dag_scoping.md
-MAX_PAIRABLE_MDP_SETS = 20  # je m1-Stufe höchstens so viele TATSÄCHLICH kompatible MDP-Mengen
+MAX_PAIRABLE_MDP_SETS = 200  # je m1-Stufe höchstens so viele TATSÄCHLICH kompatible MDP-Mengen
 # (aus `_mdp_pairable_sets`) durchprobieren - bei vielen MDPs kann `combinations(mdps, m1)` sehr
 # groß werden; die kanonische Menge zuerst plus großzügig viele Alternativen reicht, um [C7] gut
 # abzudecken, ohne bei großen Feldern spürbar langsam zu werden (realer Regressionsfund)
@@ -159,6 +168,100 @@ _PERFECT_PREFIX_LEN = 8  # C10..C17 müssen 0 sein für "perfekt"; C18-C21 sind 
 
 def _is_perfect(quality: tuple) -> bool:
     return all(v == 0 for v in quality[:_PERFECT_PREFIX_LEN])
+
+
+def _partition_downfloaters(candidate: "Candidate", mdp_ranks: frozenset[int]) -> tuple[list[int], list[int]]:
+    """Teilt `candidate.downfloaters` EINMAL in (MDP-Downfloater, Residenten-Downfloater) - beide
+    Bias-Funktionen unten brauchten früher je ihre EIGENE, unabhängig gefilterte Kopie derselben
+    Liste (echter, im Codereview gefundener Dopplungsfund); jetzt teilt der Aufrufer (`_yield_sorted`s
+    `bias`-Closure) einmal auf und reicht beide Teillisten durch."""
+    mdp_downfloaters = [r for r in candidate.downfloaters if r in mdp_ranks]
+    resident_downfloaters = [r for r in candidate.downfloaters if r not in mdp_ranks]
+    return mdp_downfloaters, resident_downfloaters
+
+
+def _mdp_downfloat_bias(downfloating_mdps: list[int], players: dict[int, Player]) -> tuple:
+    """Zusätzlicher Tie-Break (nach `sort_key[:3]`, also NACH C6/C7/C10-C21, VOR `_exchange_cost`)
+    für den Fall, dass mehrere hereingefloatete MDPs um zu wenige freie Plätze konkurrieren und
+    DESHALB (nicht als Residenten-Downfloat, sondern als MDP-Downfloat) einer von ihnen selbst
+    weiter kaskadieren muss - ein Fall, den `_exchange_cost` NICHT abdeckt (das vergleicht nur
+    MDP-zu-Residenten-Paare gegen eine volle Baseline-Paarung, nicht "welcher von mehreren MDPs
+    bleibt unversorgt"). Realer, gegen `bbpPairings.exe` gefundener und auf einer vollständigen
+    Sweep-Stichprobe bestätigter Regressionsfund (project_turnierplanung_dag_scoping.md): bevorzugt
+    wird, dass der NIEDRIGER bewertete der konkurrierenden MDPs weiter kaskadiert (der höher
+    bewertete bleibt eher versorgt); bei gleichem Score der nach Art. 1.2 SPÄTER gereihte (höhere
+    Rangnummer). Erste Stelle ist ein reines 0/1-Diskriminierungsflag (kein MDP-Downfloater vs.
+    mindestens einer) - OHNE dieses Flag würden `(0,)` (kein MDP-Downfloater) und z. B.
+    `((2.0, -8),)` (ein MDP-Downfloater) elementweise verglichen (`0` gegen `(2.0, -8)`), was in
+    Python einen `TypeError` auslöst (int nicht mit tuple vergleichbar) - mit dem Flag bricht der
+    Vergleich immer schon an erster Stelle ab, bevor die (nur bei gleichem Flag überhaupt
+    gleich-typisierten) restlichen Elemente verglichen werden."""
+    if not downfloating_mdps:
+        return (0, ())
+    return (1, tuple(sorted((players[r].score, -r) for r in downfloating_mdps)))
+
+
+def _downfloat_cascade_depth_bias(
+    resident_downfloaters: list[int],
+    next_group_residents: tuple[int, ...],
+    players: dict[int, Player],
+    topscorer_threshold: float,
+) -> tuple:
+    """ZWEITER, unabhängiger Tie-Break (nach `_mdp_downfloat_bias`): bei mehreren gleich guten
+    Kandidaten, die sich NUR darin unterscheiden, WELCHER Residenten-Downfloater die Bracket
+    verlässt, bevorzugt diese Sortierung Kandidaten, deren Downfloater NICHT komplett an der
+    unmittelbar nächsten Bracket vorbei muss (d. h. dort mindestens einen kompatiblen Partner
+    hätte) - vor Kandidaten, deren Downfloater die nächste Bracket komplett überspringen muss.
+    Realer, gegen `bbpPairings.exe` gefundener Fund: bei zwei score-gleichen Residenten in einer
+    ungeraden Bracket, von denen einer noch NICHT gegen alle Mitglieder der nächsten Bracket
+    gespielt hat und der andere BEREITS gegen alle, bevorzugt bbpPairings den, der die nächste
+    Bracket komplett überspringen MUSS, weniger - der andere (der dort noch andocken kann) bleibt
+    eher `resident`, NICHT der, der ohnehin weiter kaskadieren müsste. Nur relevant, wenn
+    `next_group_residents` bekannt ist (leer -> kein Effekt, reines No-op) - gilt GLEICHERMASSEN
+    für homogene (MDP-lose) und heterogene Brackets, siehe `_yield_sorted`s Einsatzstellen."""
+    if not next_group_residents or not resident_downfloaters:
+        return (0,)
+    must_skip_entirely = sum(
+        1
+        for r in resident_downfloaters
+        if not any(compatible(players[r], players[o], topscorer_threshold) for o in next_group_residents)
+    )
+    return (must_skip_entirely,)
+
+
+def _yield_sorted(
+    collected: list[tuple[tuple, "Candidate"]],
+    mdp_ranks: frozenset[int],
+    next_group_residents: tuple[int, ...],
+    ctx: "BracketContext",
+) -> Iterator["Candidate"]:
+    """Sortiert `collected` wie bisher (voller `sort_key`, stabil), wendet aber INNERHALB jeder
+    exakt gleich bewerteten Gruppe (gleiches `sort_key[:3]` = C6/C7/C10-C21-Präfix, also VOR
+    `_exchange_cost`) zusätzlich `_mdp_downfloat_bias` und `_downfloat_cascade_depth_bias` an,
+    bevor die Gruppe ausgegeben wird. `mdp_ranks` darf leer sein (homogene Bracket, reiner
+    Residenten-Downfloat-Fall) - `_mdp_downfloat_bias` wird dann trivial no-op, aber
+    `_downfloat_cascade_depth_bias` bleibt wirksam.
+
+    Nutzt `itertools.groupby` statt einer handgeschriebenen Gruppierungsschleife: `collected` ist
+    hier bereits vollständig sortiert, `groupby` braucht also keine zusätzliche Vorsortierung, und
+    - wichtiger - es gibt dadurch nur EINEN Code-Pfad für JEDE Gruppe (auch die letzte). Ein realer,
+    im Codereview gefundener Bug: die frühere, handgeschriebene Fassung behandelte die Gruppe NACH
+    der Schleife separat und wandte dort nur `_mdp_downfloat_bias` an, `_downfloat_cascade_depth_bias`
+    fehlte - genau für den (häufigsten) Fall, dass `collected` insgesamt nur EINE Gleichstandsgruppe
+    enthält, landete ALLES im damals unvollständig behandelten Nachlauf."""
+    collected.sort(key=lambda t: t[0])
+
+    def bias(candidate: "Candidate") -> tuple:
+        mdp_downfloaters, resident_downfloaters = _partition_downfloaters(candidate, mdp_ranks)
+        return _mdp_downfloat_bias(mdp_downfloaters, ctx.players) + _downfloat_cascade_depth_bias(
+            resident_downfloaters, next_group_residents, ctx.players, ctx.topscorer_threshold
+        )
+
+    for _, chunk in groupby(collected, key=lambda t: t[0][:3]):
+        group = [candidate for _, candidate in chunk]
+        if len(group) >= 2:
+            group.sort(key=bias)
+        yield from group
 
 
 def _search_at_fixed_size(
@@ -298,11 +401,16 @@ def _mdp_pairable_sets(mdps: tuple[int, ...], m1: int, players: dict[int, Player
     yield from combinations(mdps, m1)
 
 
-def solve_bracket(residents: list[int], mdps: list[int], ctx: BracketContext) -> Iterator[Candidate]:
+def solve_bracket(
+    residents: list[int], mdps: list[int], ctx: BracketContext, next_group_residents: tuple[int, ...] = ()
+) -> Iterator[Candidate]:
     """Löst EINE Bracket (Art. 3.1-3.8): homogen, wenn `mdps` leer ist, sonst heterogen (MDP-Paarung
     + Restgruppe, Art. 3.3.3/3.7). Verzögert (lazy) ALLE brauchbaren Kandidaten in Prioritätsreihenfolge
     - die aufrufende Rekursion in `ss_engine.py` entscheidet per echtem Weiterlösen, welcher tragfähig
-    ist (siehe Moduldoku). `mdps` muss NICHT vorsortiert sein - wird hier nach Art. 1.2 (Score
+    ist (siehe Moduldoku). `next_group_residents` (optional) wird NUR für `_downfloat_cascade_depth_bias`
+    gebraucht (welcher Downfloater die unmittelbar nächste Bracket noch erreichen kann) - ändert
+    NICHTS an der Existenzgarantie [C4], nur an der Reihenfolge sonst exakt gleich bewerteter
+    Kandidaten. `mdps` muss NICHT vorsortiert sein - wird hier nach Art. 1.2 (Score
     absteigend, dann Rang aufsteigend) normalisiert: `Candidate.downfloaters` (die Quelle für `mdps`
     beim nächsten Aufruf) ist nur nach RANG sortiert, nicht nach Score - ohne diese Normalisierung
     würde `_mdp_pairable_sets`s [C7]-Tie-Break (niedrigst bewerteter MDP geht in die Limbo) bei
@@ -315,7 +423,28 @@ def solve_bracket(residents: list[int], mdps: list[int], ctx: BracketContext) ->
     structural_m1 = min(m0, max_pairs)
 
     if m0 == 0:
-        yield from _search_homogeneous(residents, max_pairs, [], frozenset(), ctx)
+        # Echter, im Codereview gefundener Bug (behoben): dieser Zweig gab `_search_homogeneous`s
+        # Kandidaten früher DIREKT aus, ohne je durch `_yield_sorted` zu laufen - `_mdp_downfloat_bias`
+        # ist hier zwar immer ein No-op (keine MDPs), aber `_downfloat_cascade_depth_bias` (WELCHER
+        # Residenten-Downfloater die nächste Bracket noch erreicht) VERLIERT dadurch komplett seine
+        # Wirkung, obwohl reine Residenten-Downfloat-Gleichstände genau dieser Fall sind. Die eigene
+        # Gruppierung hier spiegelt den unten im heterogenen Zweig verwendeten "lazy je Downfloater-
+        # Stufe flushen"-Ansatz, damit die Trägheit (nicht sofort alle Stufen materialisieren) erhalten
+        # bleibt.
+        collected: list[tuple[tuple, Candidate]] = []
+        current_downfloater_count: int | None = None
+        for candidate in _search_homogeneous(residents, max_pairs, [], frozenset(), ctx):
+            if current_downfloater_count is not None and len(candidate.downfloaters) != current_downfloater_count:
+                yield from _yield_sorted(collected, frozenset(), next_group_residents, ctx)
+                collected = []
+            current_downfloater_count = len(candidate.downfloaters)
+            quality = _quality_tuple(
+                list(candidate.pairs), list(candidate.downfloaters), frozenset(), ctx.players, ctx.topscorer_threshold
+            )
+            downfloater_scores = tuple(sorted((ctx.players[r].score for r in candidate.downfloaters), reverse=True))
+            collected.append(((len(candidate.downfloaters), downfloater_scores, quality), candidate))
+        if collected:
+            yield from _yield_sorted(collected, frozenset(), next_group_residents, ctx)
         return
 
     # Art. 3.7: die MDP-Seite (S1) wird nur über Transposition der Resident-Seite (S2) variiert -
@@ -390,6 +519,17 @@ def solve_bracket(residents: list[int], mdps: list[int], ctx: BracketContext) ->
                 # entfernterer (und damit nach [C7] ohnehin unwahrscheinlich besserer) Restmengen
                 # nicht mehr. Deckt die kanonische Menge plus großzügig viele Alternativen ab.
                 break
+            if examined > MAX_RAW_ATTEMPTS:
+                # Echter, im Codereview gefundener Bug (behoben): `successful_mdp_pairings` zählt nur
+                # ERFOLGREICHE Mengen - ist das geteilte `examined`-Budget bereits ausgeschöpft, findet
+                # die innere Schleife (unten) für JEDE weitere `pairable_mdps` garantiert KEINEN
+                # kompatiblen `mdp_perm` mehr (bricht sofort über denselben Budget-Check ab), also
+                # bleibt `successful_mdp_pairings` bei einem bereits erschöpften Budget dauerhaft unter
+                # `MAX_PAIRABLE_MDP_SETS` - ohne diesen Check würde `combinations(mdps, m1)` (bei vielen
+                # MDPs potenziell sehr groß) bis zum Ende durchlaufen, jede Iteration noch immer mit
+                # Kosten für `limbo` und eine frische `_transpositions`-Konstruktion, ohne jede Chance
+                # auf Erfolg.
+                break
             limbo = tuple(r for r in mdps if r not in pairable_mdps)
 
             found_compatible_perm = False
@@ -450,12 +590,8 @@ def solve_bracket(residents: list[int], mdps: list[int], ctx: BracketContext) ->
             best_downfloaters_so_far = min(len(c.downfloaters) for _, c in collected)
             next_min_downfloaters = n_residents + m0 - 2 * _max_pairs_for(m1 - 1) if m1 > 0 else n_residents + m0
             if next_min_downfloaters > best_downfloaters_so_far:
-                collected.sort(key=lambda t: t[0])  # stabil: Gleichstände behalten Generierungsreihenfolge
-                for _, candidate in collected:
-                    yield candidate
+                yield from _yield_sorted(collected, mdp_ranks, next_group_residents, ctx)
                 collected = []
 
     if collected:
-        collected.sort(key=lambda t: t[0])
-        for _, candidate in collected:
-            yield candidate
+        yield from _yield_sorted(collected, mdp_ranks, next_group_residents, ctx)

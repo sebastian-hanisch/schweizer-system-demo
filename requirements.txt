@@ -1,2 +1,3 @@
 streamlit>=1.51
 plotly>=5.24
+networkx>=3.0  # ss_matching_engine.py (bbpPairings-treuer Modus, in app.py wählbar) - Live-Pfad, nicht nur Tests

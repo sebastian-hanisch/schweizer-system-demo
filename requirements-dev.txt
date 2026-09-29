@@ -1,2 +1,3 @@
 -r requirements.txt
 pytest>=8.0
+# networkx: jetzt in requirements.txt (Live-Pfad über ss_matching_engine.py) - hier nicht mehr nötig.

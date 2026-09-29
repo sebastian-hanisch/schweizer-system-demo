@@ -68,3 +68,25 @@ def test_few_players_many_rounds_shows_early_stop_warning():
 
     at = _run(setup)
     assert any("musste nach Runde" in w.value for w in at.warning)
+
+
+def _metric_values(at):
+    return {m.label: m.value for m in at.metric}
+
+
+def test_matching_engine_mode_renders_and_shows_different_metric():
+    # Echter Rauchtest (nicht nur Render-Test): der bbpPairings-treue Modus muss OHNE Fehler laufen
+    # UND eine andere Übereinstimmungsrate zeigen als der Regeltext-Modus (sonst würde die
+    # Moduswahl gar nicht tatsächlich wirken - z. B. weil `_tournament`s Cache-Key den Modus nicht
+    # mit einschließt, echter Regressionsfall, den dieser Test abdecken soll).
+    at_ruleset = _run()
+    ruleset_values = _metric_values(at_ruleset)
+
+    def setup(at):
+        at.session_state["engine_mode_radio"] = C.ENGINE_MODE_MATCHING
+
+    at_matching = _run(setup)
+    matching_values = _metric_values(at_matching)
+
+    assert matching_values["Exakte Übereinstimmung (Qualitätskriterien)"] == "100 %"
+    assert matching_values["Exakte Übereinstimmung (Qualitätskriterien)"] != ruleset_values["Exakte Übereinstimmung (Qualitätskriterien)"]

@@ -102,6 +102,9 @@ def _solve_round_uncached(
 
     ctx = BracketContext(players=players, topscorer_threshold=topscorer_threshold)
     tried: set[tuple] = set()
+    # Statisch pro Rekursionsebene (unabhängig davon, welcher Kandidat in DIESER Bracket am Ende
+    # gewinnt) - nur zur Weitergabe an `solve_bracket`s `_downfloat_cascade_depth_bias`.
+    next_group_residents = tuple(rest_groups[0][1]) if rest_groups else ()
 
     # Drei Stufen (Art. 2.4.1 [C6] hat Vorrang, [C8]/Art. 2.4.3 danach - beide ECHT per Rekursion
     # nachgeprüft, nicht per 1-Schritt-Heuristik geschätzt): zuerst Kandidaten, die IHR EIGENES
@@ -117,7 +120,7 @@ def _solve_round_uncached(
         tiers.append((True, True))
 
     for candidate_may_reduce, downstream_may_reduce in tiers:
-        for candidate in solve_bracket(residents, mdps, ctx):
+        for candidate in solve_bracket(residents, mdps, ctx, next_group_residents):
             if budget[0] <= 0:
                 return None
             if not candidate_may_reduce and len(candidate.pairs) < structural_max_pairs:
