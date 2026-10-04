@@ -3,7 +3,7 @@ Sebastian Hanisch - Operations Research und Machine Learning
 
 Anders als die Fall-Demos im Portfolio (ein Anwendungsfall, mehrere Verfahren im Vergleich) zeigt diese Demo EIN
 Verfahren - das FIDE-Dutch-Paarungssystem für Schweizer-System-Turniere - an einem wachsenden Beispiel. Drittes
-und letztes Stück der Turnierplanung-Linie der "Konzepte"-Reihe (siehe README für die Einordnung, Stück 1
+Stück der Turnierplanung-Linie der "Konzepte"-Reihe (siehe README für die Einordnung, Stück 1
 Rundenturnier und Stück 2 K.-o.-System/Setzliste).
 
 Lauffähig mit: streamlit run app.py
@@ -47,7 +47,7 @@ Nachbildung wirklich?" unten für den Unterschied).
 )
 st.caption(
     "Anders als die Fall-Demos im Portfolio, die an einem Anwendungsfall mehrere Verfahren vergleichen, zeigt "
-    "diese Demo - drittes und letztes Stück der Turnierplanung-Linie der \"Konzepte\"-Reihe - **ein** Verfahren "
+    "diese Demo - drittes Stück der Turnierplanung-Linie der \"Konzepte\"-Reihe - **ein** Verfahren "
     "an einem wachsenden Beispiel: die absoluten Kriterien (C1-C3) gelten hier IMMER exakt, die Feinheiten der "
     "Qualitätskriterien (C6-C21) sind eine gute Näherung mit einer ehrlich gemessenen, nicht behaupteten "
     "Übereinstimmungsrate gegenüber der echten Referenz-Engine."
@@ -217,6 +217,6 @@ st.markdown("---")
 
 st.caption(
     "Diese Demo ist Teil des Portfolios von [Sebastian Hanisch](https://sebastianhanisch.net) – "
-    "Operations Research und Machine Learning. Interesse an einer maßgeschneiderten Lösung für "
-    "Ihr Unternehmen? [Kontakt aufnehmen](https://sebastianhanisch.net/kontakt.html)"
+    "Operations Research und Machine Learning ([Über mich](https://sebastianhanisch.net/ueber-mich.html)). "
+    "Mehr zur Reihe: [Turnierplanung: 7 Wege zum Turnierplan](https://sebastianhanisch.net/konzepte-turnierplanung.html)."
 )

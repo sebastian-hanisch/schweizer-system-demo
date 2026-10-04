@@ -2,7 +2,7 @@
 
 **[→ Demo live ausprobieren](https://sebastianhanisch-schweizer-system-demo.streamlit.app/)**
 
-Drittes und letztes Stück der **Turnierplanung-Linie** der "Konzepte"-Reihe für die Website "Sebastian Hanisch –
+Drittes Stück der **Turnierplanung-Linie** der "Konzepte"-Reihe für die Website "Sebastian Hanisch –
 Operations Research und Machine Learning". Ein Rundenturnier (Stück 1) braucht n−1 Runden, ein K.-o.-System
 (Stück 2) opfert dafür fast alle Spieler nach einer Niederlage. Das **Schweizer System** löst beides: eine feste,
 kleine Rundenzahl, bei der (fast) alle Teilnehmer viele Partien spielen. Diese Demo baut den Paarungsalgorithmus
@@ -361,6 +361,4 @@ Programmdatei von bbpPairings, bei jedem Push und wöchentlich mit den jeweils n
 
 ---
 
-Diese Demo ist Teil des Portfolios von [Sebastian Hanisch](https://sebastianhanisch.net) – Operations Research
-und Machine Learning. Interesse an einer maßgeschneiderten Lösung für Ihr Unternehmen?
-[Kontakt aufnehmen](https://sebastianhanisch.net/kontakt.html)
+Diese Demo ist Teil des Portfolios von [Sebastian Hanisch](https://sebastianhanisch.net) – Operations Research und Machine Learning ([Über mich](https://sebastianhanisch.net/ueber-mich.html)). Mehr zur Reihe: [Turnierplanung: 7 Wege zum Turnierplan](https://sebastianhanisch.net/konzepte-turnierplanung.html).
