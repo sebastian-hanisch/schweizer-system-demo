@@ -144,7 +144,7 @@ auf tausenden zufälligen Testrunden geprüft - die beiden Modi liegen hier bewu
 )
 mc1, mc2 = st.columns(2)
 if engine_mode == C.ENGINE_MODE_RULESET:
-    mc1.metric("Exakte Übereinstimmung (Qualitätskriterien)", "~99 %", help="Gemessen an zufälligen Mehrrundenturnieren, 4-16 Spieler, 1-4 Runden (1430 Vergleiche) - auf einer bewusst härteren Stichprobe (6-19 Spieler, bis 6 Runden) ~97 %. Siehe README für die vollständige Methodik.")
+    mc1.metric("Exakte Übereinstimmung (Qualitätskriterien)", "~99 %", help="Gemessen an zufälligen Mehrrundenturnieren, 4-16 Spieler, 1-4 Runden (zuletzt gemessen: 1420 von 1427 Vergleichen übereinstimmend; die heutige Stichprobe erzeugt 1430 Fälle) - auf einer bewusst härteren Stichprobe (6-19 Spieler, bis 6 Runden) ~97 %. Siehe README für die vollständige Methodik.")
     mc2.metric("Übereinstimmung bei Runde 1 (frisches Feld)", "100 %", help="Die 'obere Hälfte gegen untere Hälfte'-Standardaufteilung wird exakt nachgebildet.")
     st.markdown(
         """
