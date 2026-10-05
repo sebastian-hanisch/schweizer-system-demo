@@ -99,7 +99,7 @@ und behebbar (kein einziges davon war vorher überhaupt beobachtbar, weil die 1-
 verdeckte):
 10. **Fehlende Memoisierung ließ die neue tiefe Rekursion pathologisch langsam werden**: dieselbe
     "restliche Bracket-Kette + MDP-Menge" taucht über verschiedene Kandidaten hinweg oft mehrfach auf -
-    ohne Zwischenspeicher explodierte das kombinatorisch (gemessen: einzelne 31-32-Spieler-Saatwerte
+    ohne Zwischenspeicher explodierte das kombinatorisch (gemessen: einzelne 31-32-Spieler-Zufalls-Seeds
     brauchten bis zu 44 s). Gefixt mit einem über die ganze Rundenlösung geteilten Cache (Schlüssel:
     Score-Folge + sortierte MDP-Menge + `allow_reduction`) - dabei bewusst NUR echte Erschöpfung cachen,
     nie einen durch Budget-Abbruch erzwungenen Fehlschlag (sonst hätte ein späterer, frisch budgetierter
@@ -151,8 +151,8 @@ Gleichstand, sondern eine echte Suchlücke):
     Downfloater-Stufen (mit eigenem Kandidaten-Deckel je Stufe), nicht rohe Kandidaten.
 
 **Gemessenes Endergebnis** (nach Fund 13, `_exchange_cost` behalten): auf den ursprünglichen
-Messparametern (4-16 Spieler, 1-4 Runden, jetzt 30 statt 15 Saatwerte für mehr Konfidenz) **98,2 %**
-(1401/1427); auf der bewusst härteren Stichprobe (6-19 Spieler, bis 6 Runden, 25 Saatwerte) **92,0 %**
+Messparametern (4-16 Spieler, 1-4 Runden, jetzt 30 statt 15 Zufalls-Seeds für mehr Konfidenz) **98,2 %**
+(1401/1427); auf der bewusst härteren Stichprobe (6-19 Spieler, bis 6 Runden, 25 Zufalls-Seeds) **92,0 %**
 (1835/1994) - beide klar über den vorherigen Messungen (97,8 % bzw. 86,7 % vor dieser Vertiefung).
 Performance blieb dabei unerwartet ein eigener Fund: `Player`s berechnete Eigenschaften
 (`opponents`, `colour_difference`, `last_two_colours`, ...) liefen als `@property` bei JEDEM Aufruf
@@ -271,7 +271,7 @@ und `_global_matching_fallback` (rundenweite Paarung als letzter Rettungsanker) 
 nicht C6-C21-Optimalität, und greifen nach der aktuellen Messung nur noch in Ausnahmefällen.
 
 **Performance**: die tiefere [C8]-Rekursion machte die Suche zunächst pathologisch langsam für einzelne
-Saatwerte (bis 44 s bei 32 Spielern/9 Runden) - nach Memoisierung, dem Fix an `_improve_bye_assignment` und dem
+Zufalls-Seeds (bis 44 s bei 32 Spielern/9 Runden) - nach Memoisierung, dem Fix an `_improve_bye_assignment` und dem
 Umstieg von `@property` auf `functools.cached_property` in `ss_model.Player` (s. o., fünfte Überarbeitung)
 liegt die gemessene Verteilung über 240 Stichproben (31-32 Spieler, 9 Runden) bei Median **~0,1 s**,
 99.-Perzentil ~0,46 s, schlechtester beobachteter Fall **~1,1 s**. Die siebte und achte Runde
