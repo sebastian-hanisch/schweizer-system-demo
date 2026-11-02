@@ -55,6 +55,8 @@ from ss_quality import colour_terms, downfloat_repeat_terms, upfloat_repeat_term
 # 0,15s -> 1,79s - für eine interaktive Demo weiterhin unproblematisch.
 MAX_RAW_ATTEMPTS = 200_000
 MAX_ALTERNATIVES = 300
+PERFECT_SEARCH_NODES = 20_000  # Knotenbudget der gezielten Suche nach dem ersten PERFEKTEN Kandidaten (unten)
+MAX_PERFECT_CANDIDATES = 10  # so viele perfekte Kandidaten höchstens (in Erzeugungsreihenfolge) zusätzlich aufnehmen
 MAX_PER_MDP_PERM = 30  # je MDP-Paarungs-Wahl höchstens so viele Restgruppen-Kandidaten sammeln, sonst
 # könnte EINE mdp_perm-Wahl mit vielen fast gleich guten Restgruppen-Varianten das ganze
 # MAX_ALTERNATIVES-Budget füllen, bevor überhaupt eine ANDERE (farblich ggf. bessere) mdp_perm-Wahl
@@ -167,7 +169,8 @@ _PERFECT_PREFIX_LEN = 8  # C10..C17 müssen 0 sein für "perfekt"; C18-C21 sind 
 
 
 def _is_perfect(quality: tuple) -> bool:
-    return all(v == 0 for v in quality[:_PERFECT_PREFIX_LEN])
+    # C10..C17 (die ersten acht Einträge) alle 0 - ausgeschrieben statt per Generator: wird je Kandidat aufgerufen.
+    return not (quality[0] or quality[1] or quality[2] or quality[3] or quality[4] or quality[5] or quality[6] or quality[7])
 
 
 def _partition_downfloaters(candidate: "Candidate", mdp_ranks: frozenset[int]) -> tuple[list[int], list[int]]:
@@ -271,41 +274,326 @@ def _search_at_fixed_size(
     mdp_ranks: frozenset[int],
     ctx: BracketContext,
     extra_downfloaters: tuple[int, ...] = (),
-) -> list[Candidate]:
+) -> Iterator[Candidate]:
     """Art. 3.6: Transposition/Tausch-Suche für EINE feste S1/S2-Aufteilung (fester Paarzahl).
-    Sammelt bis zu `MAX_ALTERNATIVES` gültige Kandidaten (stabil nach Qualität sortiert - "generiert
-    früher" gewinnt bei Gleichstand automatisch durch Python's stabilen Sort, Art. 3.8.1) für die
-    aufrufende Rekursion, damit sie bei Bedarf mehr als nur den EINEN besten ausprobieren kann."""
+    Liefert (verzögert/lazy) bis zu `MAX_ALTERNATIVES` gültige Kandidaten, stabil nach Qualität sortiert
+    ("generiert früher" gewinnt bei Gleichstand, Art. 3.8.1), damit die aufrufende Rekursion bei Bedarf
+    mehr als nur den EINEN besten ausprobieren kann.
+
+    Lazy ist hier der entscheidende Geschwindigkeitsgewinn: ist ein PERFEKTER Kandidat (C10-C17 alle 0)
+    dabei, ist der erste in Erzeugungsreihenfolge zugleich der beste und wird sofort geliefert. Die
+    übrigen Alternativen werden nur berechnet, wenn die Rekursion ihn verwirft - sonst blieben die bis zu
+    300 Kandidaten je Aufruf (gemessen: 375 000 Bewertungen in sechs Turnieren) ungenutzt. Die gelieferte
+    Folge ist dieselbe wie bei vollständigem Sammeln und Sortieren."""
     n1 = len(s1)
-    collected: list[tuple[tuple, Candidate]] = []
-    examined = 0
+    splits = _exchange_splits(s1, s2)
+    first_s1, first_s2 = next(splits)  # der unveränderte Original-Split
+    state = [0]  # [bisher geprüfte rohe Anordnungen] - geteilt über alle Aufteilungen (MAX_RAW_ATTEMPTS)
 
-    for split_s1, split_s2 in _exchange_splits(s1, s2):
-        for perm in _transpositions(split_s2, n1):
-            examined += 1
-            pairs = fixed_pairs + list(zip(split_s1, perm))
-            downfloaters = sorted(set(split_s2) - set(perm))
-            all_downfloaters = sorted(downfloaters + list(extra_downfloaters))
+    # Stufe 1: der erste Kandidat der ersten Aufteilung bis zum ersten perfekten (höchstens MAX_ALTERNATIVES).
+    seen: list[tuple[tuple, tuple, Candidate]] = []
+    perfect: list[tuple[tuple, tuple, Candidate]] = []
 
-            if all(compatible(ctx.players[a], ctx.players[b], ctx.topscorer_threshold) for a, b in pairs):
-                resident_downfloaters = [r for r in all_downfloaters if r not in mdp_ranks]
-                quality = _quality_tuple(pairs, resident_downfloaters, mdp_ranks, ctx.players, ctx.topscorer_threshold)
-                candidate = Candidate(pairs=tuple(pairs), downfloaters=tuple(all_downfloaters))
-                collected.append((quality, candidate))
-                if len(collected) >= MAX_ALTERNATIVES:
-                    break
-            if examined >= MAX_RAW_ATTEMPTS:
+    def emit_first(quality: tuple, perm: tuple[int, ...], candidate: Candidate) -> bool:
+        seen.append((quality, (0, perm), candidate))
+        if _is_perfect(quality):
+            perfect.append(seen[-1])
+            return True
+        return len(seen) >= MAX_ALTERNATIVES
+
+    stopped = _enumerate_valid(first_s1, first_s2, fixed_pairs, mdp_ranks, ctx, extra_downfloaters, state, emit_first)
+
+    skip_key = None
+    if perfect:
+        yield perfect[0][2]
+        skip_key = perfect[0][1]
+        # Die Rekursion will mehr: jetzt vollständig sammeln, wie es sonst von Anfang an geschah.
+        seen = []
+        state = [0]
+        splits = _exchange_splits(s1, s2)
+        start_index = 0
+        stopped = False
+    else:
+        start_index = 1
+
+    collected: list[tuple[tuple, tuple, Candidate]] = seen
+    have_perfect = False
+    nodes_left = PERFECT_SEARCH_NODES
+    perfect_found: list[tuple[tuple, tuple, Candidate]] = []
+    current_split = [0]
+
+    def emit(quality: tuple, perm: tuple[int, ...], candidate: Candidate) -> bool:
+        nonlocal have_perfect
+        collected.append((quality, (current_split[0], perm), candidate))
+        have_perfect = have_perfect or _is_perfect(quality)
+        return len(collected) >= MAX_ALTERNATIVES
+
+    if not stopped:
+        for split_index, (split_s1, split_s2) in enumerate(splits, start=start_index):
+            current_split[0] = split_index
+            if _enumerate_valid(split_s1, split_s2, fixed_pairs, mdp_ranks, ctx, extra_downfloaters, state, emit):
                 break
-        else:
-            continue
-        break
+
+    have_perfect = have_perfect or bool(perfect)
+
+    if not have_perfect and collected:
+        # Die ersten MAX_ALTERNATIVES Anordnungen teilen in lexikografischer Reihenfolge dieselben ersten
+        # Paare - trägt eines davon einen Farbfehler, tragen ihn alle, und der beste Kandidat (Art. 3.4.1:
+        # der erste in Erzeugungsreihenfolge gewinnt) liegt dahinter und wird nie gesehen. Gegen
+        # bbpPairings gemessen: schon ab 13 Spielern in einer Score-Gruppe, schon in Runde 2.
+        # Gezielte Tiefensuche mit Schranke in DERSELBEN Reihenfolge (siehe `_first_perfect_candidates`).
+        for split_index, (split_s1, split_s2) in enumerate(_exchange_splits(s1, s2)):
+            found, nodes_left = _first_perfect_candidates(
+                split_index, split_s1, split_s2, fixed_pairs, mdp_ranks, ctx, extra_downfloaters, nodes_left
+            )
+            perfect_found.extend(found)
+            if perfect_found or nodes_left <= 0:
+                break
+        collected.extend(perfect_found)
 
     if not collected:
         fallback = _matching_fallback(s1, s2, fixed_pairs, mdp_ranks, ctx, extra_downfloaters)
-        return [fallback] if fallback is not None else []
+        if fallback is not None:
+            yield fallback
+        return
 
-    collected.sort(key=lambda t: t[0])  # stabil: Gleichstände behalten Generierungsreihenfolge
-    return [c for _, c in collected]
+    collected.sort(key=lambda t: (t[0], t[1]))  # Gleichstände behalten die Erzeugungsreihenfolge
+    for _, key, candidate in collected[:MAX_ALTERNATIVES + len(perfect_found)]:
+        if key != skip_key:
+            yield candidate
+
+
+def _perm_count(m: int, k: int) -> int:
+    """Anzahl geordneter Auswahlen von k aus m Elementen (m! / (m-k)!)."""
+    count = 1
+    for i in range(k):
+        count *= m - i
+    return count
+
+
+def _enumerate_valid(
+    split_s1: tuple[int, ...],
+    split_s2: tuple[int, ...],
+    fixed_pairs: list[tuple[int, int]],
+    mdp_ranks: frozenset[int],
+    ctx: BracketContext,
+    extra_downfloaters: tuple[int, ...],
+    state: list[int],
+    emit,
+) -> bool:
+    """Alle GÜLTIGEN (C1/C3-konformen) Transpositionen einer festen S1/S2-Aufteilung, in der
+    lexikografischen Reihenfolge von `_transpositions`, je mit der Qualität, die `_quality_tuple` liefern
+    würde. `emit(quality, perm, candidate)` gibt True zurück, um die Suche ganz zu beenden.
+
+    Gleiches Ergebnis wie das frühere "alle Anordnungen aufzählen, dann je prüfen und bewerten", nur
+    schneller: Tiefensuche in derselben Reihenfolge, ein unverträgliches Paar verwirft sofort alle
+    Anordnungen mit diesem Präfix, und C10-C13 sowie die Upfloat-Terme werden als laufende Teilsummen
+    geführt statt für jeden Kandidaten neu. `state[0]` zählt die rohen Anordnungen weiter, die die
+    Aufzählung geprüft hätte (verworfene Äste mit ihrer vollen Anzahl) - so bleibt der Deckel
+    `MAX_RAW_ATTEMPTS` an derselben Stelle wirksam. Gibt True zurück, wenn die Suche insgesamt enden soll
+    (Deckel oder `emit`)."""
+    players, threshold = ctx.players, ctx.topscorer_threshold
+    n1 = len(split_s1)
+    ordered = sorted(split_s2)
+    m = len(ordered)
+    if n1 > m:
+        return False  # `permutations(..., n1)` wäre leer
+    if not all(compatible(players[a], players[b], threshold) for a, b in fixed_pairs):
+        state[0] += _perm_count(m, n1)  # jede Anordnung wäre ungültig
+        return state[0] >= MAX_RAW_ATTEMPTS
+
+    pair_cache: dict[tuple[int, int], tuple | None] = {}
+    float_cache: dict[int, tuple[int, int, int, int]] = {}  # Rang -> (C14, C16, C15, C17) des Spielers
+
+    def floats(rank: int) -> tuple[int, int, int, int]:
+        hit = float_cache.get(rank)
+        if hit is None:
+            f14, f16 = downfloat_repeat_terms(players[rank])
+            f15, f17 = upfloat_repeat_terms(players[rank])
+            hit = float_cache[rank] = (f14, f16, f15, f17)
+        return hit
+
+    def pair_info(a: int, b: int):
+        """(C10, C11, C12, C13, C15, C17, Score des residenten MDP-Gegners) oder None, wenn unzulässig."""
+        key = (a, b)
+        if key not in pair_cache:
+            if not compatible(players[a], players[b], threshold):
+                pair_cache[key] = None
+            else:
+                t10, t11, t12, t13 = colour_terms(players[a], players[b], threshold)
+                resident = a if b in mdp_ranks else (b if a in mdp_ranks else None)
+                if resident is None:
+                    pair_cache[key] = (t10, t11, t12, t13, 0, 0, None)
+                else:
+                    _, _, f15, f17 = floats(resident)
+                    pair_cache[key] = (t10, t11, t12, t13, f15, f17, players[resident].score)
+        return pair_cache[key]
+
+    # laufende Summen: C10-C13, C15, C17 und die Scores der markierten MDP-Gegner (für C19/C21)
+    sums = [0, 0, 0, 0, 0, 0]
+    flagged_15: list[float] = []
+    flagged_17: list[float] = []
+    for a, b in fixed_pairs:
+        info = pair_info(a, b)
+        for k in range(6):
+            sums[k] += info[k]
+        if info[4]:
+            flagged_15.append(info[6])
+        if info[5]:
+            flagged_17.append(info[6])
+
+    chosen: list[int] = []
+    used = [False] * m
+
+    def leaf() -> bool:
+        state[0] += 1
+        downfloaters = sorted([ordered[i] for i in range(m) if not used[i]] + list(extra_downfloaters))
+        c14 = c16 = 0
+        flagged_14: list[float] = []
+        flagged_16: list[float] = []
+        for r in downfloaters:
+            if r in mdp_ranks:
+                continue
+            f14, f16, _, _ = floats(r)
+            if f14:
+                c14 += 1
+                flagged_14.append(players[r].score)
+            if f16:
+                c16 += 1
+                flagged_16.append(players[r].score)
+        # Die Markierungslisten sind fast immer leer - dann ist das Sortieren überflüssig.
+        quality = (
+            sums[0], sums[1], sums[2], sums[3], c14, sums[4], c16, sums[5],
+            tuple(sorted(flagged_14, reverse=True)) if flagged_14 else (),
+            tuple(sorted(flagged_15, reverse=True)) if flagged_15 else (),
+            tuple(sorted(flagged_16, reverse=True)) if flagged_16 else (),
+            tuple(sorted(flagged_17, reverse=True)) if flagged_17 else (),
+        )
+        pairs = fixed_pairs + list(zip(split_s1, chosen))
+        stop = emit(quality, tuple(chosen), Candidate(pairs=tuple(pairs), downfloaters=tuple(downfloaters)))
+        return stop or state[0] >= MAX_RAW_ATTEMPTS
+
+    def walk(depth: int) -> bool:
+        if depth == n1:
+            return leaf()
+        completions = _perm_count(m - depth - 1, n1 - depth - 1)
+        for i in range(m):
+            if used[i]:
+                continue
+            info = pair_info(split_s1[depth], ordered[i])
+            if info is None:
+                state[0] += completions
+                if state[0] >= MAX_RAW_ATTEMPTS:
+                    return True
+                continue
+            for k in range(6):
+                sums[k] += info[k]
+            if info[4]:
+                flagged_15.append(info[6])
+            if info[5]:
+                flagged_17.append(info[6])
+            used[i] = True
+            chosen.append(ordered[i])
+            stop = walk(depth + 1)
+            chosen.pop()
+            used[i] = False
+            if info[5]:
+                flagged_17.pop()
+            if info[4]:
+                flagged_15.pop()
+            for k in range(6):
+                sums[k] -= info[k]
+            if stop:
+                return True
+        return False
+
+    return walk(0)
+
+
+def _first_perfect_candidates(
+    split_index: int,
+    s1: tuple[int, ...],
+    s2: tuple[int, ...],
+    fixed_pairs: list[tuple[int, int]],
+    mdp_ranks: frozenset[int],
+    ctx: BracketContext,
+    extra_downfloaters: tuple[int, ...],
+    nodes_left: int,
+) -> tuple[list[tuple[tuple, tuple, Candidate]], int]:
+    """Der BESTE Kandidat (kleinste Qualität, bei Gleichstand der in Erzeugungsreihenfolge erste) einer
+    festen S1/S2-Aufteilung - per Tiefensuche mit Schranke statt Aufzählung aller Anordnungen, in derselben
+    lexikografischen Reihenfolge wie `_transpositions`.
+
+    Möglich, weil C10-C13 paarweise additiv und nichtnegativ sind: die Teilsumme der bisher gewählten Paare
+    ist eine untere Schranke. Ist sie lexikografisch schon größer als die der besten bisher gefundenen
+    Lösung, kann der Zweig nicht mehr gewinnen und wird verworfen. Ist ein perfekter Kandidat (C10-C17 alle
+    0) gefunden, ist nichts Besseres mehr möglich und die Suche endet. Die Float-Terme der Downfloater
+    (C14/C16) hängen von der Restmenge ab und werden erst am Blatt bewertet. Gibt (Kandidaten,
+    verbleibendes Knotenbudget) zurück; die Schlüssel `(split_index, perm)` passen zur Aufzählung."""
+    n1 = len(s1)
+    if n1 > len(s2):
+        return [], nodes_left
+    players, threshold = ctx.players, ctx.topscorer_threshold
+    base = [0, 0, 0, 0]
+    for a, b in fixed_pairs:
+        for k, term in enumerate(colour_terms(players[a], players[b], threshold)):
+            base[k] += term
+
+    ordered_s2 = sorted(s2)
+    cache: dict[tuple[int, int], tuple[int, int, int, int] | None] = {}
+
+    def pair_terms(a: int, b: int):
+        """(C10..C13) des Paars, oder `None`, wenn es nicht erlaubt ist (C1/C3)."""
+        key = (a, b)
+        if key not in cache:
+            cache[key] = colour_terms(players[a], players[b], threshold) if compatible(players[a], players[b], threshold) else None
+        return cache[key]
+
+    best: list = []  # [(quality, perm, Candidate)] - höchstens ein Eintrag
+    chosen: list[int] = []
+    used = [False] * len(ordered_s2)
+    partial = list(base)
+    budget = [nodes_left]
+
+    def descend(depth: int) -> bool:
+        """True = Suche beenden (perfekter Kandidat gefunden oder Budget erschöpft)."""
+        if depth == n1:
+            leftover = [r for i, r in enumerate(ordered_s2) if not used[i]]
+            downfloaters = sorted(leftover + list(extra_downfloaters))
+            resident_downfloaters = [r for r in downfloaters if r not in mdp_ranks]
+            pairs = fixed_pairs + list(zip(s1, chosen))
+            quality = _quality_tuple(pairs, resident_downfloaters, mdp_ranks, players, threshold)
+            if not best or quality < best[0][0]:
+                best[:] = [(quality, tuple(chosen), Candidate(pairs=tuple(pairs), downfloaters=tuple(downfloaters)))]
+            return _is_perfect(best[0][0])
+        for i, candidate in enumerate(ordered_s2):
+            if used[i]:
+                continue
+            budget[0] -= 1
+            if budget[0] <= 0:
+                return True
+            terms = pair_terms(s1[depth], candidate)
+            if terms is None:
+                continue
+            for k in range(4):
+                partial[k] += terms[k]
+            # Schranke: schon die Teilsumme ist lexikografisch größer als die beste Lösung -> Zweig verwerfen.
+            pruned = bool(best) and tuple(partial) > best[0][0][:4]
+            stop = False
+            if not pruned:
+                used[i] = True
+                chosen.append(candidate)
+                stop = descend(depth + 1)
+                chosen.pop()
+                used[i] = False
+            for k in range(4):
+                partial[k] -= terms[k]
+            if stop:
+                return True
+        return False
+
+    descend(0)
+    return [(q, (split_index, perm), c) for q, perm, c in best], max(budget[0], 0)
 
 
 def _matching_fallback(
@@ -464,6 +752,7 @@ def solve_bracket(
     mdp_ranks = frozenset(mdps)
     examined = 0
     collected: list[tuple[tuple, Candidate]] = []
+    best_tier = [None, 0]  # [wenigste Downfloater bisher, Anzahl gesammelter Kandidaten genau dieser Stufe]
 
     # bbpPairings' eigener Quellcode (dutch.cpp, Fund via Quellcode-Lektüre, s.
     # project_turnierplanung_dag_scoping.md) zeigt: der verbleibende, durch C6/C7/C10-C21 NICHT
@@ -575,15 +864,24 @@ def solve_bracket(
                     downfloater_scores = tuple(sorted((ctx.players[r].score for r in candidate.downfloaters), reverse=True))
                     sort_key = (len(candidate.downfloaters), downfloater_scores, quality, _exchange_cost(list(candidate.pairs)))
                     collected.append((sort_key, candidate))
-                    if len(collected) >= MAX_ALTERNATIVES:
+                    # Die Obergrenze zählt NUR Kandidaten der besten Stufe (wenigste Downfloater): jede
+                    # Gegnerwahl liefert bis zu MAX_PER_MDP_PERM Kandidaten je Stufe, und Stufen mit mehr
+                    # Downfloatern können [C6] nie gewinnen - zählten sie mit, wären die 300 nach vier
+                    # Gegnerwahlen voll, bevor die farblich perfekte überhaupt drankommt (gemessen:
+                    # 17 Spieler, Runde 2, zwei hereingefloatete Spieler, bbpPairings' Wahl war die siebte).
+                    if best_tier[0] is None or n_downfloaters < best_tier[0]:
+                        best_tier[0], best_tier[1] = n_downfloaters, 1
+                    elif n_downfloaters == best_tier[0]:
+                        best_tier[1] += 1
+                    if best_tier[1] >= MAX_ALTERNATIVES:
                         break
-                if len(collected) >= MAX_ALTERNATIVES:
+                if best_tier[1] >= MAX_ALTERNATIVES:
                     break
             if found_compatible_perm:
                 successful_mdp_pairings += 1
-            if len(collected) >= MAX_ALTERNATIVES:
+            if best_tier[1] >= MAX_ALTERNATIVES:
                 break
-        if len(collected) >= MAX_ALTERNATIVES or examined > MAX_RAW_ATTEMPTS:
+        if best_tier[1] >= MAX_ALTERNATIVES or examined > MAX_RAW_ATTEMPTS:
             break
 
         if collected:
@@ -592,6 +890,7 @@ def solve_bracket(
             if next_min_downfloaters > best_downfloaters_so_far:
                 yield from _yield_sorted(collected, mdp_ranks, next_group_residents, ctx)
                 collected = []
+                best_tier[0], best_tier[1] = None, 0
 
     if collected:
         yield from _yield_sorted(collected, mdp_ranks, next_group_residents, ctx)

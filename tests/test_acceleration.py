@@ -241,8 +241,22 @@ def test_matching_mode_agrees_exactly_without_acceleration_on_larger_fields():
 
 @needs_oracle
 def test_ruleset_mode_agrees_with_bbppairings_on_accelerated_tournaments():
-    # Gemessen 95,8 % (552 von 576) - ohne Beschleunigung 94,4 %: die Beschleunigung kostet nichts.
+    # Gemessen 97,2 % (560 von 576) - ohne Beschleunigung 96,5 %: die Beschleunigung kostet nichts. Diese
+    # Teilmenge: 100 % (79 von 79); Schwelle mit Abstand nach unten.
     rate, total, wrong_colours = _agreement(RULESET, sizes=(8, 11, 14), round_counts=(5, 9), seeds=range(2))
     assert total >= 40
-    assert rate >= 0.85, f"{rate:.1%} von {total}"
+    assert rate >= 0.95, f"{rate:.1%} von {total}"
+    assert wrong_colours == 0
+
+
+@needs_oracle
+def test_ruleset_mode_agrees_with_bbppairings_on_larger_fields_without_acceleration():
+    # Regression der Bracket-Suche (ss_bracket: perfekter bzw. bester Kandidat auch jenseits der ersten 300 gültigen
+    # Anordnungen; Obergrenze zählt nur Kandidaten der besten Stufe). Vorher 94,4 % auf der vollen Messreihe, jetzt
+    # 96,5 %; diese Teilmenge 96,6 % (317 von 328), alle Farben gleich.
+    rate, total, wrong_colours = _agreement(
+        RULESET, sizes=(8, 11, 14, 17), round_counts=(5, 7, 9), seeds=range(4), accelerate=False
+    )
+    assert total >= 100
+    assert rate >= 0.93, f"{rate:.1%} von {total}"
     assert wrong_colours == 0

@@ -31,6 +31,35 @@ MAX_ROUND_BUDGET = 200_000  # Deckel für die GESAMTZAHL an Kandidaten-Versuchen
 # rekursive Rundenlösung (alle Brackets zusammen) - verhindert pathologisches Backtracking
 
 
+class _Replay:
+    """Eine einmal berechnete, LAZY Kandidatenfolge, die beliebig oft von vorn durchlaufen werden kann.
+    Jeder Durchlauf liest zuerst die bereits gelieferten Kandidaten und zieht erst danach neue aus der
+    Quelle nach - die Bracket-Suche wird so höchstens einmal je Bracket gerechnet, nicht je Stufe und je
+    Rekursionsast neu."""
+
+    __slots__ = ("_source", "_items")
+
+    def __init__(self, source):
+        self._source = source
+        self._items: list = []
+
+    def __iter__(self):
+        index = 0
+        while True:
+            if index < len(self._items):
+                yield self._items[index]
+                index += 1
+                continue
+            if self._source is None:
+                return
+            try:
+                item = next(self._source)
+            except StopIteration:
+                self._source = None
+                return
+            self._items.append(item)
+
+
 def _scoregroups(active_players: dict[int, Player]) -> list[tuple[float, list[int]]]:
     by_score: dict[float, list[int]] = {}
     for r, p in active_players.items():
@@ -119,8 +148,18 @@ def _solve_round_uncached(
     if allow_reduction:
         tiers.append((True, True))
 
+    # Dieselbe Bracket (gleiche Residenten, MDPs und Folge-Bracket) wird auf bis zu drei Stufen und in
+    # verschiedenen Rekursionsästen immer wieder verlangt (gemessen: 42 % der Aufrufe wiederholen sich) -
+    # die Kandidatenfolge hängt nur davon und von `players`/Schwelle ab, ist also je Runde wiederverwendbar.
+    bracket_key = ("bracket", tuple(residents), tuple(sorted(mdps)), next_group_residents)
+    candidates = cache.get(bracket_key) if cache is not None else None
+    if candidates is None:
+        candidates = _Replay(solve_bracket(residents, mdps, ctx, next_group_residents))
+        if cache is not None:
+            cache[bracket_key] = candidates
+
     for candidate_may_reduce, downstream_may_reduce in tiers:
-        for candidate in solve_bracket(residents, mdps, ctx, next_group_residents):
+        for candidate in candidates:
             if budget[0] <= 0:
                 return None
             if not candidate_may_reduce and len(candidate.pairs) < structural_max_pairs:

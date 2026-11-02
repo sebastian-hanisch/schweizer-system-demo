@@ -10,7 +10,26 @@ from ss_colour import STRONG, allocate, classify
 from ss_model import DOWN, Player, UP
 
 
+_PAIR_CACHE_LIMIT = 200_000
+# (id(a), id(b), Schwelle) -> (a, b, Ergebnis). `a` und `b` stehen mit im Wert, damit sie nicht freigegeben
+# und ihre Speicheradressen neu vergeben werden, solange der Eintrag lebt; `Player` ist unveränderlich.
+_colour_terms_cache: dict[tuple[int, int, float], tuple] = {}
+
+
 def colour_terms(a: Player, b: Player, topscorer_threshold: float) -> tuple[int, int, int, int]:
+    """Wie `_colour_terms`, aber je Spielerpaar zwischengespeichert: die Suche bewertet dasselbe Paar
+    hunderttausendfach in verschiedenen Kandidaten (gemessen: 2,7 Mio. Aufrufe in sechs Turnieren)."""
+    key = (id(a), id(b), topscorer_threshold)
+    hit = _colour_terms_cache.get(key)
+    if hit is None:
+        if len(_colour_terms_cache) >= _PAIR_CACHE_LIMIT:
+            _colour_terms_cache.clear()
+        hit = (a, b, _colour_terms(a, b, topscorer_threshold))
+        _colour_terms_cache[key] = hit
+    return hit[2]
+
+
+def _colour_terms(a: Player, b: Player, topscorer_threshold: float) -> tuple[int, int, int, int]:
     """(C10, C11, C12, C13) für EIN Paar (a, b), Farbe wie `ss_colour.allocate` sie tatsächlich
     vergäbe. C10/C11 zählen nur bei Spitzenreitern (Art. 1.8: Score > `topscorer_threshold`, der
     Hälfte der maximal möglichen Punktzahl - NICHT Gleichheit mit dem aktuellen Höchststand);

@@ -25,6 +25,18 @@ def _opposite(colour: str) -> str:
 
 
 def classify(player: Player) -> ColourPreference:
+    # `Player` ist unveränderlich und die Präferenz hängt nur von `games` ab - einmal je Instanz berechnen
+    # (wie `functools.cached_property`, das auf einer eingefrorenen Dataclass über `__dict__` arbeitet).
+    # Die Bracket-Suche ruft `classify` Millionen Mal für dieselben Spieler auf (gemessen: 15,8 Mio. Aufrufe
+    # in sechs Turnieren mit 31-32 Spielern).
+    cached = player.__dict__.get("_colour_preference")
+    if cached is None:
+        cached = _classify(player)
+        player.__dict__["_colour_preference"] = cached
+    return cached
+
+
+def _classify(player: Player) -> ColourPreference:
     last = player.last_colour
     if last is None:
         return ColourPreference(NONE, None)

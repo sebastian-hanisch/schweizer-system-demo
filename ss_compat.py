@@ -31,7 +31,21 @@ def topscorer_threshold_for_round(round_no: int, total_rounds: int | None) -> fl
     return max(round_no - 1, 0) / 2.0
 
 
+_compatible_cache: dict[tuple[int, int, float], tuple] = {}  # wie `ss_quality._colour_terms_cache`
+
+
 def compatible(a: Player, b: Player, topscorer_threshold: float) -> bool:
+    key = (id(a), id(b), topscorer_threshold)
+    hit = _compatible_cache.get(key)
+    if hit is None:
+        if len(_compatible_cache) >= 200_000:
+            _compatible_cache.clear()
+        hit = (a, b, _compatible(a, b, topscorer_threshold))
+        _compatible_cache[key] = hit
+    return hit[2]
+
+
+def _compatible(a: Player, b: Player, topscorer_threshold: float) -> bool:
     """`topscorer_threshold` = die Hälfte der maximal möglichen Punktzahl (Art. 1.8: "Topscorers ...
     have a score of OVER 50 % of the maximum possible score") - NICHT der aktuell höchste Score im
     Feld (realer, gegen bbpPairings.exe gefundener Bug: "Spitzenreiter" ist ein fester Schwellwert

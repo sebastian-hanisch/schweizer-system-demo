@@ -83,3 +83,72 @@ def test_downfloater_choice_is_not_a_positional_shortcut():
     ctx = BracketContext(players=players, topscorer_threshold=99.0)
     best = next(iter(solve_bracket([5, 6, 7], [], ctx, (10,))))
     assert 7 not in best.downfloaters
+
+
+# --- Aufzählung gültiger Transpositionen: Tiefensuche == erschöpfende Aufzählung ---------------------
+
+
+def _reference_enumeration(split_s1, split_s2, fixed_pairs, mdp_ranks, ctx, extra_downfloaters):
+    """Die frühere Fassung: ALLE Anordnungen aufzählen, je prüfen und mit `_quality_tuple` bewerten."""
+    from itertools import permutations
+
+    import ss_bracket as B
+    from ss_compat import compatible
+
+    out = []
+    raw = 0
+    for perm in permutations(sorted(split_s2), len(split_s1)):
+        raw += 1
+        pairs = fixed_pairs + list(zip(split_s1, perm))
+        downfloaters = sorted(sorted(set(split_s2) - set(perm)) + list(extra_downfloaters))
+        if all(compatible(ctx.players[a], ctx.players[b], ctx.topscorer_threshold) for a, b in pairs):
+            residents = [r for r in downfloaters if r not in mdp_ranks]
+            quality = B._quality_tuple(pairs, residents, mdp_ranks, ctx.players, ctx.topscorer_threshold)
+            out.append((quality, perm, tuple(pairs), tuple(downfloaters)))
+    return out, raw
+
+
+def test_depth_first_enumeration_equals_exhaustive_enumeration():
+    import random
+
+    import ss_bracket as B
+    from ss_scenario import generate_tournament
+
+    rng = random.Random(7)
+    checked = 0
+    for n, rounds, seed in [(12, 5, 1), (13, 6, 2), (16, 7, 3), (21, 6, 4), (24, 8, 5)]:
+        players = generate_tournament(n, rounds, seed).players
+        for threshold in (float("inf"), (rounds - 1) / 2):  # vor der letzten Runde / in der letzten Runde
+            ctx = B.BracketContext(players=players, topscorer_threshold=threshold)
+            by_score = {}
+            for r, p in players.items():
+                by_score.setdefault(p.score, []).append(r)
+            for score, ranks in by_score.items():
+                ranks = sorted(ranks)
+                if len(ranks) < 4:
+                    continue
+                higher = sorted(r for r, p in players.items() if p.score > score)
+                cases = []
+                half = len(ranks) // 2
+                s1, s2 = tuple(ranks[:min(half, 6)]), tuple(ranks[min(half, 6):][:8])
+                cases.append((s1, s2, [], frozenset(), ()))  # homogen
+                if len(higher) >= 2:
+                    mdps = tuple(higher[:2])
+                    cases.append((mdps, tuple(ranks[:7]), [], frozenset(mdps), ()))  # MDPs als S1
+                    pairs = [(mdps[0], ranks[0])]  # feste MDP-Paare + Limbo + Restgruppe
+                    rest = ranks[1:]
+                    cases.append((tuple(rest[:2]), tuple(rest[2:8]), pairs, frozenset(mdps), (higher[2],) if len(higher) > 2 else ()))
+                for split_s1, split_s2, fixed, mdp_ranks, extra in cases:
+                    expected, raw = _reference_enumeration(split_s1, split_s2, fixed, mdp_ranks, ctx, extra)
+                    got = []
+                    state = [0]
+
+                    def emit(quality, perm, candidate):
+                        got.append((quality, perm, candidate.pairs, candidate.downfloaters))
+                        return False
+
+                    B._enumerate_valid(split_s1, split_s2, fixed, mdp_ranks, ctx, extra, state, emit)
+                    assert got == expected, f"n={n} Score {score}: {len(got)} statt {len(expected)} Kandidaten"
+                    assert state[0] == raw, f"geprüfte Anordnungen: {state[0]} statt {raw}"
+                    checked += 1
+    assert checked >= 30

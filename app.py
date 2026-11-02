@@ -166,7 +166,7 @@ auf tausenden zufälligen Testrunden geprüft - die beiden Modi liegen hier bewu
 )
 mc1, mc2 = st.columns(2)
 if engine_mode == C.ENGINE_MODE_RULESET:
-    mc1.metric("Exakte Übereinstimmung (Qualitätskriterien)", "~99 %", help="Gemessen an zufälligen Mehrrundenturnieren, 4-16 Spieler, 1-4 Runden (zuletzt gemessen: 1420 von 1427 Vergleichen übereinstimmend; die heutige Stichprobe erzeugt 1430 Fälle) - auf einer bewusst härteren Stichprobe (6-19 Spieler, bis 6 Runden) ~97 %. Auf größeren Feldern (8-31 Spieler, 5-9 Runden; 574 von bbpPairings fortgeführte Runden) 94,4 % bei Paarung und Freilos; die Farben stimmen bei übereinstimmender Paarung in jeder Runde. Siehe README für die vollständige Methodik.")
+    mc1.metric("Exakte Übereinstimmung (Qualitätskriterien)", "~99 %", help="Gemessen an zufälligen Mehrrundenturnieren, 4-16 Spieler, 1-4 Runden (zuletzt gemessen: 1420 von 1427 Vergleichen übereinstimmend; die heutige Stichprobe erzeugt 1430 Fälle) - auf einer bewusst härteren Stichprobe (6-19 Spieler, bis 6 Runden) ~97 %. Auf größeren Feldern (8-31 Spieler, 5-9 Runden; 574 von bbpPairings fortgeführte Runden) 96,5 % bei Paarung und Freilos; die Farben stimmen bei übereinstimmender Paarung in jeder Runde. Siehe README für die vollständige Methodik.")
     mc2.metric("Übereinstimmung bei Runde 1 (frisches Feld)", "100 %", help="Die 'obere Hälfte gegen untere Hälfte'-Standardaufteilung wird exakt nachgebildet.")
     st.markdown(
         """
@@ -174,9 +174,9 @@ Die eingebaute Vorausschau ([C8], "erreicht die nächste Bracket ihr eigenes Max
 beliebig tiefer Rekursion die GESAMTE restliche Kette, nicht nur den nächsten Schritt. Der größere Teil der
 früheren Abweichung war gar kein Tie-Break-Problem, sondern eine reine Suchbreiten-Grenze: bbpPairings'
 tatsächliche Wahl fehlte schlicht im enumerierten Kandidatensatz - großzügigeres Anheben der Such-Deckel hob
-die Übereinstimmung deutlich. Der verbliebene Rest besteht auf größeren Feldern (32 Abweichungen in 574
+die Übereinstimmung deutlich. Der verbliebene Rest besteht auf größeren Feldern (20 Abweichungen in 574
 Runden) zu 9 Fällen aus einer weiteren Suchtiefen-Grenze (die Referenz liegt schon bei [C6]/[C7] besser) und zu
-23 aus Gleichständen darunter - die Referenz-Engine löst SOLCHE Reste über ein
+11 aus Gleichständen darunter - die Referenz-Engine löst SOLCHE Reste über ein
 einziges, für die GANZE Runde (nicht nur eine Bracket) fortgeführtes gewichtetes Matching-Objekt - ein
 grundlegend anderer Mechanismus als die Bracket-für-Bracket-Suche hier (Art. 3+4 wörtlich). Ein Portierungs-
 versuch DIESES Mechanismus als nachträglicher Tie-Break auf der Bracket-für-Bracket-Architektur brachte
