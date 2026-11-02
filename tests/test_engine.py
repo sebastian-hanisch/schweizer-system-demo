@@ -77,7 +77,7 @@ def test_bye_assignment_prefers_lowest_score_c5_over_first_found_completion():
     # Regressionstest (echter, gegen bbpPairings.exe gefundener Bug, exakter Turnierstand aus einem
     # 5-Spieler-Zufallsturnier reproduziert): [C5] ("minimiere den Score des Freilos-Empfängers",
     # Art. 2.3.1) wurde von der Bracket-lokalen Suche gar nicht geprüft - sie akzeptierte schlicht
-    # die ERSTE vollständige Rundenlösung. Ohne Nachbesserung (`_improve_bye_assignment`) bekommt
+    # die ERSTE vollständige Rundenlösung. Ohne die Freilos-Obergrenze in `ss_chain.solve_round` bekommt
     # hier Spieler 1 (Score 3.0, der Spitzenreiter!) das Freilos - korrekt bekommt es Spieler 4
     # (Score 2.0, niedriger), exakt wie bbpPairings.exe.
     def _game(round_no, opponent, colour, score, is_bye=False):

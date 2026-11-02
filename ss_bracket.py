@@ -133,34 +133,40 @@ def _quality_tuple(
         c13 += t13
 
     c14 = c16 = 0
-    flagged_14, flagged_16 = [], []
     for r in resident_downfloaters:
         f14, f16 = downfloat_repeat_terms(players[r])
         c14 += f14
         c16 += f16
-        if f14:
-            flagged_14.append(players[r].score)
-        if f16:
-            flagged_16.append(players[r].score)
 
+    # C15/C17 zählen die residenten Gegner von MDPs, die vorige bzw. vorvorige Runde einen Upfloat bekamen;
+    # C18-C21 bewerten die SCORE-DIFFERENZ des jeweiligen MDP-Paars (Art. 2.4.13-2.4.16: "Minimise the score
+    # differences (taken in descending order) of ..."), nicht den Score eines Spielers: C18/C20 für MDPs, die
+    # vorige/vorvorige Runde einen Downfloat bekamen, C19/C21 für deren Gegner mit Upfloat.
     c15 = c17 = 0
-    flagged_15, flagged_17 = [], []
+    flagged_18, flagged_19, flagged_20, flagged_21 = [], [], [], []
     for a, b in pairs:
         resident = a if b in mdp_ranks else (b if a in mdp_ranks else None)
         if resident is None:
             continue
+        mdp = b if resident == a else a
+        difference = players[mdp].score - players[resident].score
         f15, f17 = upfloat_repeat_terms(players[resident])
+        f18, f20 = downfloat_repeat_terms(players[mdp])
         c15 += f15
         c17 += f17
         if f15:
-            flagged_15.append(players[resident].score)
+            flagged_19.append(difference)
         if f17:
-            flagged_17.append(players[resident].score)
+            flagged_21.append(difference)
+        if f18:
+            flagged_18.append(difference)
+        if f20:
+            flagged_20.append(difference)
 
-    c18 = tuple(sorted(flagged_14, reverse=True))
-    c19 = tuple(sorted(flagged_15, reverse=True))
-    c20 = tuple(sorted(flagged_16, reverse=True))
-    c21 = tuple(sorted(flagged_17, reverse=True))
+    c18 = tuple(sorted(flagged_18, reverse=True))
+    c19 = tuple(sorted(flagged_19, reverse=True))
+    c20 = tuple(sorted(flagged_20, reverse=True))
+    c21 = tuple(sorted(flagged_21, reverse=True))
 
     return (c10, c11, c12, c13, c14, c15, c16, c17, c18, c19, c20, c21)
 
@@ -403,7 +409,7 @@ def _enumerate_valid(
         return state[0] >= MAX_RAW_ATTEMPTS
 
     pair_cache: dict[tuple[int, int], tuple | None] = {}
-    float_cache: dict[int, tuple[int, int, int, int]] = {}  # Rang -> (C14, C16, C15, C17) des Spielers
+    float_cache: dict[int, tuple[int, int, int, int]] = {}  # Rang -> (Downfloat letzte, vorletzte Runde, Upfloat letzte, vorletzte Runde)
 
     def floats(rank: int) -> tuple[int, int, int, int]:
         hit = float_cache.get(rank)
@@ -414,7 +420,7 @@ def _enumerate_valid(
         return hit
 
     def pair_info(a: int, b: int):
-        """(C10, C11, C12, C13, C15, C17, Score des residenten MDP-Gegners) oder None, wenn unzulässig."""
+        """(C10, C11, C12, C13, C15, C17, Score-Differenz MDP - Resident, C18, C20) oder None, wenn unzulässig."""
         key = (a, b)
         if key not in pair_cache:
             if not compatible(players[a], players[b], threshold):
@@ -423,24 +429,47 @@ def _enumerate_valid(
                 t10, t11, t12, t13 = colour_terms(players[a], players[b], threshold)
                 resident = a if b in mdp_ranks else (b if a in mdp_ranks else None)
                 if resident is None:
-                    pair_cache[key] = (t10, t11, t12, t13, 0, 0, None)
+                    pair_cache[key] = (t10, t11, t12, t13, 0, 0, 0.0, 0, 0)
                 else:
+                    mdp = b if resident == a else a
                     _, _, f15, f17 = floats(resident)
-                    pair_cache[key] = (t10, t11, t12, t13, f15, f17, players[resident].score)
+                    f18, f20, _, _ = floats(mdp)
+                    pair_cache[key] = (t10, t11, t12, t13, f15, f17, players[mdp].score - players[resident].score, f18, f20)
         return pair_cache[key]
 
-    # laufende Summen: C10-C13, C15, C17 und die Scores der markierten MDP-Gegner (für C19/C21)
+    # laufende Summen: C10-C13, C15, C17 und die Score-Differenzen der markierten MDP-Paare (für C18-C21)
     sums = [0, 0, 0, 0, 0, 0]
-    flagged_15: list[float] = []
-    flagged_17: list[float] = []
-    for a, b in fixed_pairs:
-        info = pair_info(a, b)
+    flagged_18: list[float] = []
+    flagged_19: list[float] = []
+    flagged_20: list[float] = []
+    flagged_21: list[float] = []
+
+    def push(info) -> None:
         for k in range(6):
             sums[k] += info[k]
         if info[4]:
-            flagged_15.append(info[6])
+            flagged_19.append(info[6])
         if info[5]:
-            flagged_17.append(info[6])
+            flagged_21.append(info[6])
+        if info[7]:
+            flagged_18.append(info[6])
+        if info[8]:
+            flagged_20.append(info[6])
+
+    def pop(info) -> None:
+        if info[8]:
+            flagged_20.pop()
+        if info[7]:
+            flagged_18.pop()
+        if info[5]:
+            flagged_21.pop()
+        if info[4]:
+            flagged_19.pop()
+        for k in range(6):
+            sums[k] -= info[k]
+
+    for a, b in fixed_pairs:
+        push(pair_info(a, b))
 
     chosen: list[int] = []
     used = [False] * m
@@ -449,25 +478,19 @@ def _enumerate_valid(
         state[0] += 1
         downfloaters = sorted([ordered[i] for i in range(m) if not used[i]] + list(extra_downfloaters))
         c14 = c16 = 0
-        flagged_14: list[float] = []
-        flagged_16: list[float] = []
         for r in downfloaters:
             if r in mdp_ranks:
                 continue
             f14, f16, _, _ = floats(r)
-            if f14:
-                c14 += 1
-                flagged_14.append(players[r].score)
-            if f16:
-                c16 += 1
-                flagged_16.append(players[r].score)
+            c14 += f14
+            c16 += f16
         # Die Markierungslisten sind fast immer leer - dann ist das Sortieren überflüssig.
         quality = (
             sums[0], sums[1], sums[2], sums[3], c14, sums[4], c16, sums[5],
-            tuple(sorted(flagged_14, reverse=True)) if flagged_14 else (),
-            tuple(sorted(flagged_15, reverse=True)) if flagged_15 else (),
-            tuple(sorted(flagged_16, reverse=True)) if flagged_16 else (),
-            tuple(sorted(flagged_17, reverse=True)) if flagged_17 else (),
+            tuple(sorted(flagged_18, reverse=True)) if flagged_18 else (),
+            tuple(sorted(flagged_19, reverse=True)) if flagged_19 else (),
+            tuple(sorted(flagged_20, reverse=True)) if flagged_20 else (),
+            tuple(sorted(flagged_21, reverse=True)) if flagged_21 else (),
         )
         pairs = fixed_pairs + list(zip(split_s1, chosen))
         stop = emit(quality, tuple(chosen), Candidate(pairs=tuple(pairs), downfloaters=tuple(downfloaters)))
@@ -486,23 +509,13 @@ def _enumerate_valid(
                 if state[0] >= MAX_RAW_ATTEMPTS:
                     return True
                 continue
-            for k in range(6):
-                sums[k] += info[k]
-            if info[4]:
-                flagged_15.append(info[6])
-            if info[5]:
-                flagged_17.append(info[6])
+            push(info)
             used[i] = True
             chosen.append(ordered[i])
             stop = walk(depth + 1)
             chosen.pop()
             used[i] = False
-            if info[5]:
-                flagged_17.pop()
-            if info[4]:
-                flagged_15.pop()
-            for k in range(6):
-                sums[k] -= info[k]
+            pop(info)
             if stop:
                 return True
         return False

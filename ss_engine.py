@@ -1,64 +1,22 @@
-"""Orchestrierung: die Runde wird Bracket für Bracket gelöst (Score absteigend, Art. 1.9.2), genau
-wie es der FIDE-Regeltext selbst vorschreibt - NICHT als ein globales gewichtetes Matching über
-die ganze Runde (das war ein früherer, inzwischen verworfener Ansatz, der sich eher an bbpPairings'
-eigener C++-Implementierungsstrategie orientierte als am Regeltext selbst - siehe
-project_turnierplanung_dag_scoping.md).
+"""Orchestrierung: eine Runde wird nach dem FIDE-Regeltext gelöst - Brackets von oben nach unten (Score
+absteigend, Art. 1.9.2), Paarungen nach Art. 3+4 - NICHT als ein globales gewichtetes Matching über die ganze
+Runde (das tut der bbpPairings-treue Modus in `ss_matching_engine.py`).
 
-Jede Bracket liefert `ss_bracket.solve_bracket(...)` als LAZY Folge von Kandidaten in
-Prioritätsreihenfolge (Art. 3.8.1), nicht nur EINEN geschätzten besten. `_solve_round` probiert für
-jeden Kandidaten ECHT (per Rekursion), ob sich damit die RESTLICHE Runde zu Ende lösen lässt - erst
-wenn das fehlschlägt, wird der nächste Kandidat versucht. Drei Stufen pro Bracket (siehe dortige
-Doku): (1) eigenes Maximum UND die GESAMTE restliche Kette (beliebig tief, nicht nur die
-unmittelbar nächste Bracket) löst OHNE jede Reduktion; (2) eigenes Maximum, Rest darf reduzieren;
-(3) nur wenn die Bracket selbst reduzieren darf, auch kleinere Paarzahlen. Stufe (1) ersetzt eine
-frühere Fassung, die nur die UNMITTELBAR NÄCHSTE Bracket per einzelnem Kardinalitäts-Matching
-SCHÄTZTE (schnell, aber nachweislich manchmal zu kurzsichtig - siehe project_turnierplanung_dag_scoping.md:
-sowohl der ursprüngliche dutch_2025_C5-Fund als auch spätere mehrstufige Kaskaden brauchten echtes,
-beliebig tiefes Nachprüfen statt eines 1-Schritt-Blicks). Da diese Rekursion selbst schnell abbricht,
-sobald ein Kandidat funktioniert, bleibt sie trotz beliebiger Tiefe performant."""
+Die Rundenlösung selbst steht in `ss_chain.py`, in zwei Phasen: erst die Kette der Downfloater-Mengen nach
+[C5]-[C9] (billig, ohne Farben und Paarungen), dann je Block die Paarung aus dem Kandidatenstrom von
+`ss_bracket.solve_bracket` (Art. 3+4, sortiert nach C10-C21). Hier bleiben das Vorbereiten der aktiven
+Spieler, der letzte Rettungsanker (`_global_matching_fallback`) und das Zuteilen der Farben (Art. 5.2)."""
 
 from __future__ import annotations
 
 from ss_blossom import maximum_cardinality_matching
-from ss_bracket import BracketContext, NoValidPairingError, solve_bracket
+from ss_bracket import NoValidPairingError
+from ss_chain import solve_round
 from ss_colour import allocate
 from ss_compat import compatible, topscorer_threshold_for_round
 from ss_model import BYE, DOWN, GameRecord, Pairing, Player, RoundResult, UP
 
 __all__ = ["pair_round", "apply_round", "NoValidPairingError"]
-
-MAX_ROUND_BUDGET = 200_000  # Deckel für die GESAMTZAHL an Kandidaten-Versuchen über die ganze
-# rekursive Rundenlösung (alle Brackets zusammen) - verhindert pathologisches Backtracking
-
-
-class _Replay:
-    """Eine einmal berechnete, LAZY Kandidatenfolge, die beliebig oft von vorn durchlaufen werden kann.
-    Jeder Durchlauf liest zuerst die bereits gelieferten Kandidaten und zieht erst danach neue aus der
-    Quelle nach - die Bracket-Suche wird so höchstens einmal je Bracket gerechnet, nicht je Stufe und je
-    Rekursionsast neu."""
-
-    __slots__ = ("_source", "_items")
-
-    def __init__(self, source):
-        self._source = source
-        self._items: list = []
-
-    def __iter__(self):
-        index = 0
-        while True:
-            if index < len(self._items):
-                yield self._items[index]
-                index += 1
-                continue
-            if self._source is None:
-                return
-            try:
-                item = next(self._source)
-            except StopIteration:
-                self._source = None
-                return
-            self._items.append(item)
-
 
 def _scoregroups(active_players: dict[int, Player]) -> list[tuple[float, list[int]]]:
     by_score: dict[float, list[int]] = {}
@@ -69,122 +27,12 @@ def _scoregroups(active_players: dict[int, Player]) -> list[tuple[float, list[in
     return sorted(by_score.items(), key=lambda kv: -kv[0])
 
 
-def _solve_round(
-    groups: list[tuple[float, list[int]]],
-    mdps: list[int],
-    players: dict[int, Player],
-    topscorer_threshold: float,
-    allow_reduction: bool,
-    budget: list[int],
-    excluded_from_bye: frozenset[int] = frozenset(),
-    cache: dict | None = None,
-) -> tuple[list[tuple[int, int]], int | None] | None:
-    """`excluded_from_bye`: NUR für die [C5]-Verbesserung in `pair_round` - Ränge, die für DIESEN
-    Suchversuch künstlich als "schon freilosberechtigt ausgeschöpft" gelten, um die Suche zu einer
-    ECHTEN Alternative zu zwingen (siehe dortige Doku).
-
-    `cache`: über die GANZE Rundenlösung geteiltes Memo - dieselbe "restliche Kette + dieselben MDPs"
-    taucht oft MEHRFACH auf (verschiedene Kandidaten einer früheren Bracket können zum selben Rest
-    führen, und die neue [C8]-Stufe unten prüft die GESAMTE Kette per echter Rekursion statt nur
-    einen Schritt) - ohne Memo kann das bei größeren/verzweigten Feldern kombinatorisch teuer werden
-    (gemessener Fund: einzelne 31-32-Spieler-Saatwerte brauchten bis zu 44s). Score-Folge statt
-    id(groups) als Schlüsselteil: `groups` ist immer nach eindeutigen Scores sortiert, die Score-Folge
-    identifiziert ein Suffix eindeutig - id() wäre riskant (CPython kann Adressen wiederverwenden)."""
-    key = (tuple(score for score, _ in groups), tuple(sorted(mdps)), allow_reduction, excluded_from_bye)
-    if cache is not None and key in cache:
-        return cache[key]
-
-    result = _solve_round_uncached(groups, mdps, players, topscorer_threshold, allow_reduction, budget, excluded_from_bye, cache)
-    # NICHT cachen, wenn ein negatives Ergebnis (None) durch ERSCHÖPFTES Budget statt durch echtes
-    # Durchprobieren ALLER Kandidaten zustande kam - `budget` wird über den GANZEN Rekursionsbaum
-    # geteilt, und ein späterer Aufruf (z. B. der zweite Durchgang in `_solve_round_both_passes`, mit
-    # frischem Budget) könnte für DENSELBEN Schlüssel durchaus noch fündig werden. Ein fälschlich
-    # gecachtes "unlösbar" wäre ein echter Korrektheitsfehler, kein bloßer Performance-Verlust.
-    if cache is not None and (result is not None or budget[0] > 0):
-        cache[key] = result
-    return result
-
-
-def _solve_round_uncached(
-    groups: list[tuple[float, list[int]]],
-    mdps: list[int],
-    players: dict[int, Player],
-    topscorer_threshold: float,
-    allow_reduction: bool,
-    budget: list[int],
-    excluded_from_bye: frozenset[int],
-    cache: dict | None,
-) -> tuple[list[tuple[int, int]], int | None] | None:
-    if not groups:
-        if not mdps:
-            return [], None
-        if len(mdps) == 1:
-            candidate = mdps[0]
-            if not players[candidate].had_bye_or_equivalent and candidate not in excluded_from_bye:  # C2
-                return [], candidate
-        return None  # Art. 1.9.3: unlösbar (0 Brackets mehr, aber >=2 oder ein nicht-freilosfähiger MDP übrig)
-
-    _, residents = groups[0]
-    rest_groups = groups[1:]
-    n_residents = len(residents)
-    structural_max_pairs = min((n_residents + len(mdps)) // 2, n_residents)
-
-    ctx = BracketContext(players=players, topscorer_threshold=topscorer_threshold)
-    tried: set[tuple] = set()
-    # Statisch pro Rekursionsebene (unabhängig davon, welcher Kandidat in DIESER Bracket am Ende
-    # gewinnt) - nur zur Weitergabe an `solve_bracket`s `_downfloat_cascade_depth_bias`.
-    next_group_residents = tuple(rest_groups[0][1]) if rest_groups else ()
-
-    # Drei Stufen (Art. 2.4.1 [C6] hat Vorrang, [C8]/Art. 2.4.3 danach - beide ECHT per Rekursion
-    # nachgeprüft, nicht per 1-Schritt-Heuristik geschätzt): zuerst Kandidaten, die IHR EIGENES
-    # strukturelles Maximum erreichen UND bei denen die GESAMTE restliche Kette (beliebig tief, nicht
-    # nur die unmittelbar nächste Bracket) ganz ohne Reduktion durchlöst; danach dieselben Kandidaten
-    # mit einer Rest-Lösung, die selbst reduzieren darf; erst wenn GAR KEINER davon zu einer
-    # vollständigen Rundenlösung führt (und nur wenn diese Bracket selbst reduzieren darf), auch
-    # Kandidaten unter dem eigenen Maximum. Die "Rest ganz ohne Reduktion"-Stufe ist einfach ein
-    # rekursiver Aufruf mit `allow_reduction=False` - dieselbe Maschinerie, die schon `pair_round`
-    # für den allerersten (äußersten) Versuch nutzt, jetzt konsequent auf JEDER Ebene angewendet.
-    tiers = [(False, False), (False, True)]
-    if allow_reduction:
-        tiers.append((True, True))
-
-    # Dieselbe Bracket (gleiche Residenten, MDPs und Folge-Bracket) wird auf bis zu drei Stufen und in
-    # verschiedenen Rekursionsästen immer wieder verlangt (gemessen: 42 % der Aufrufe wiederholen sich) -
-    # die Kandidatenfolge hängt nur davon und von `players`/Schwelle ab, ist also je Runde wiederverwendbar.
-    bracket_key = ("bracket", tuple(residents), tuple(sorted(mdps)), next_group_residents)
-    candidates = cache.get(bracket_key) if cache is not None else None
-    if candidates is None:
-        candidates = _Replay(solve_bracket(residents, mdps, ctx, next_group_residents))
-        if cache is not None:
-            cache[bracket_key] = candidates
-
-    for candidate_may_reduce, downstream_may_reduce in tiers:
-        for candidate in candidates:
-            if budget[0] <= 0:
-                return None
-            if not candidate_may_reduce and len(candidate.pairs) < structural_max_pairs:
-                break  # weitere (noch kleinere) Paarzahlen sind auf dieser Stufe ohnehin nicht besser
-            key = (candidate.downfloaters, downstream_may_reduce)
-            if key in tried:
-                continue
-            tried.add(key)
-            budget[0] -= 1
-            rest = _solve_round(
-                rest_groups, list(candidate.downfloaters), players, topscorer_threshold, downstream_may_reduce, budget, excluded_from_bye, cache
-            )
-            if rest is not None:
-                rest_pairs, rest_bye = rest
-                return list(candidate.pairs) + rest_pairs, rest_bye
-    return None
-
-
 def _global_matching_fallback(
     active_players: dict[int, Player], topscorer_threshold: float
 ) -> tuple[list[tuple[int, int]], int | None] | None:
-    """Letzter Rettungsanker auf Rundenebene: falls selbst das echte Backtracking in `_solve_round`
-    (begrenzt durch `MAX_ROUND_BUDGET`) keine Lösung findet, ABER irgendeine global [C1]-[C3]-konforme
-    Paarung (ohne Rücksicht auf Bracket-Struktur oder Qualitätskriterien C6-C21) existiert, wird DIE
-    verwendet, statt fälschlich [C4]/Art. 1.9.3 zu melden. Bewusster Kompromiss: Korrektheit (eine
+    """Letzter Rettungsanker auf Rundenebene: falls die Rundenlösung in `ss_chain.solve_round` keine Lösung
+    findet, ABER irgendeine global [C1]-[C3]-konforme Paarung (ohne Rücksicht auf Bracket-Struktur oder
+    Qualitätskriterien C6-C21) existiert, wird DIE verwendet, statt fälschlich [C4]/Art. 1.9.3 zu melden. Bewusster Kompromiss: Korrektheit (eine
     Paarung existiert überhaupt) hat Vorrang vor FIDE-Qualitätsoptimalität in diesem Randfall."""
     ranks = sorted(active_players)
     n_real = len(ranks)
@@ -222,65 +70,6 @@ def _global_matching_fallback(
     return pairs, bye_rank
 
 
-MAX_BYE_IMPROVEMENT_ATTEMPTS = 6  # zusätzliche volle Suchversuche, um [C5]/[C9] am Freilos zu verbessern
-
-
-def _solve_round_both_passes(
-    groups: list[tuple[float, list[int]]], players: dict[int, Player], topscorer_threshold: float, excluded_from_bye: frozenset[int]
-) -> tuple[list[tuple[int, int]], int | None] | None:
-    cache: dict = {}
-    result = _solve_round(
-        groups, [], players, topscorer_threshold, allow_reduction=False, budget=[MAX_ROUND_BUDGET], excluded_from_bye=excluded_from_bye, cache=cache
-    )
-    if result is None:
-        result = _solve_round(
-            groups, [], players, topscorer_threshold, allow_reduction=True, budget=[MAX_ROUND_BUDGET], excluded_from_bye=excluded_from_bye, cache=cache
-        )
-    return result
-
-
-def _bye_key(bye_rank: int, players: dict[int, Player]) -> tuple[float, int]:
-    p = players[bye_rank]
-    return p.score, p.unplayed_games  # [C5] dann [C9], beide zu minimieren
-
-
-def _improve_bye_assignment(
-    groups: list[tuple[float, list[int]]], players: dict[int, Player], topscorer_threshold: float, pairs: list[tuple[int, int]], bye_rank: int
-) -> tuple[list[tuple[int, int]], int]:
-    """[C5]/[C9] werden von `_solve_round` selbst NICHT geprüft (sie betreffen nur den EINEN
-    Freilos-Empfänger am Ende der Kette, nicht die Bracket-lokale Kandidatenauswahl) - hier
-    nachträglich, mit gezielten, beschränkt vielen Suchversuchen: JEDER bereits AUSPROBIERTE
-    Freilos-Empfänger (nicht nur der aktuell BESTE) wird für den nächsten Versuch künstlich als
-    "schon gehabt" markiert, damit jeder Versuch eine tatsächlich NEUE Alternative liefert - das
-    beste gefundene Ergebnis gewinnt. Bricht früh ab, sobald der bewiesen niedrigstmögliche Score
-    erreicht ist, oder wenn keine Alternative mehr gefunden wird.
-
-    (Frühere Fassung schloss nur den aktuell BESTEN Empfänger aus: sobald ein Versuch nicht
-    verbesserte, blieb `best_bye` unverändert, also blieb auch `excluded` unverändert - jeder
-    weitere Versuch wiederholte deterministisch exakt dieselbe, bereits erfolglose Suche. Gemessener
-    Fund: ein 31-Spieler-Saatwert lief dadurch 6-mal denselben ~3s-Suchlauf statt 6 verschiedene.)"""
-    eligible_scores = [p.score for p in players.values() if not p.had_bye_or_equivalent]
-    if not eligible_scores:
-        return pairs, bye_rank
-    best_possible_score = min(eligible_scores)
-
-    best_pairs, best_bye = pairs, bye_rank
-    excluded: frozenset[int] = frozenset({bye_rank})
-    for _ in range(MAX_BYE_IMPROVEMENT_ATTEMPTS):
-        if _bye_key(best_bye, players)[0] <= best_possible_score:
-            break  # [C5] beweisbar nicht mehr verbesserbar
-        retry = _solve_round_both_passes(groups, players, topscorer_threshold, excluded)
-        if retry is None:
-            break  # keine echte Alternative mehr - bisher bestes Ergebnis behalten
-        retry_pairs, retry_bye = retry
-        if retry_bye is None:
-            break  # sollte bei gleicher Teilnehmerzahl nicht vorkommen - sicherheitshalber abbrechen
-        excluded = excluded | {retry_bye}
-        if _bye_key(retry_bye, players) < _bye_key(best_bye, players):
-            best_pairs, best_bye = retry_pairs, retry_bye
-    return best_pairs, best_bye
-
-
 def pair_round(
     players: dict[int, Player], round_no: int, absent: frozenset[int] = frozenset(), total_rounds: int | None = None
 ) -> RoundResult:
@@ -297,14 +86,12 @@ def pair_round(
     topscorer_threshold = topscorer_threshold_for_round(round_no, total_rounds)
     groups = _scoregroups(active_players)
 
-    result = _solve_round_both_passes(groups, active_players, topscorer_threshold, frozenset())
+    result = solve_round(groups, active_players, topscorer_threshold)
     if result is None:
         result = _global_matching_fallback(active_players, topscorer_threshold)
     if result is None:
         raise NoValidPairingError("keine gültige Rundenpaarung gefunden (Art. 1.9.3)")
     raw_pairs, bye_rank = result
-    if bye_rank is not None:
-        raw_pairs, bye_rank = _improve_bye_assignment(groups, active_players, topscorer_threshold, raw_pairs, bye_rank)
 
     pairings: list[Pairing] = []
     float_direction: dict[int, str] = {}
