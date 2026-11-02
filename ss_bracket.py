@@ -85,20 +85,31 @@ class BracketContext:
     topscorer_threshold: float
 
 
-def _exchange_splits(s1: tuple[int, ...], s2: tuple[int, ...]) -> Iterator[tuple[tuple[int, ...], tuple[int, ...]]]:
+def _exchange_splits(
+    s1: tuple[int, ...], s2: tuple[int, ...], bsn: dict[int, int] | None = None
+) -> Iterator[tuple[tuple[int, ...], tuple[int, ...]]]:
     """Art. 4.3: erst der unveränderte Original-Split (kein Tausch), dann alle Tausche gleich
-    großer Gruppen zwischen S1 und S2, sortiert nach den vier Vergleichsregeln (4.3.2)."""
+    großer Gruppen zwischen S1 und S2, sortiert nach den vier Vergleichsregeln (4.3.2).
+
+    Die Regeln vergleichen BSN (Bracket-Folgenummern 1, 2, 3, ... der Spieler in ihrer Bracket-Reihenfolge),
+    NICHT Startranglisten-Nummern: die Summe der getauschten BSN (Regel 2) und die größte bzw. kleinste
+    getauschte BSN (Regeln 3 und 4). Mit Rängen statt BSN weichen die Summen ab, sobald die Ränge nicht
+    lückenlos aufeinanderfolgen (gemessen: 17 Spieler, Runde 4 - Tausch 3<->10 gegen 4<->13 hat bei BSN 1<->3 und
+    2<->4 gleiche Summendifferenz 2 und entscheidet dann Regel 3, mit Rängen lag er 7 gegen 9). `bsn` bildet
+    Rang -> BSN ab; ohne Angabe gilt die Reihenfolge der Spieler in `s1 + s2`."""
     yield s1, s2
+    if bsn is None:
+        bsn = {rank: index + 1 for index, rank in enumerate(sorted(s1 + s2))}
     max_k = min(len(s1), len(s2))
     for k in range(1, max_k + 1):
         exchanges = []
         for a_group in combinations(s1, k):  # von S1 nach S2 bewegt
             for b_group in combinations(s2, k):  # von S2 nach S1 bewegt
-                sum_diff = abs(sum(b_group) - sum(a_group))
+                sum_diff = abs(sum(bsn[x] for x in b_group) - sum(bsn[x] for x in a_group))
                 # Regel 3: größte differierende BSN (S1->S2) gewinnt -> absteigend sortiert, negiert
                 # (damit ascending-Tupelvergleich "besser zuerst" ergibt). Regel 4: kleinste
                 # differierende BSN (S2->S1) gewinnt -> aufsteigend sortiert, unverändert.
-                key = (sum_diff, tuple(-x for x in sorted(a_group, reverse=True)), tuple(sorted(b_group)))
+                key = (sum_diff, tuple(-x for x in sorted((bsn[x] for x in a_group), reverse=True)), tuple(sorted(bsn[x] for x in b_group)))
                 exchanges.append((key, a_group, b_group))
         exchanges.sort(key=lambda t: t[0])
         for _, a_group, b_group in exchanges:
@@ -115,7 +126,7 @@ def _transpositions(s2: tuple[int, ...], n1: int) -> Iterator[tuple[int, ...]]:
 
 def _quality_tuple(
     pairs: list[tuple[int, int]],
-    resident_downfloaters: list[int],
+    downfloaters: list[int],
     mdp_ranks: frozenset[int],
     players: dict[int, Player],
     topscorer_threshold: float,
@@ -132,18 +143,27 @@ def _quality_tuple(
         c12 += t12
         c13 += t13
 
-    c14 = c16 = 0
-    for r in resident_downfloaters:
-        f14, f16 = downfloat_repeat_terms(players[r])
-        c14 += f14
-        c16 += f16
-
     # C15/C17 zählen die residenten Gegner von MDPs, die vorige bzw. vorvorige Runde einen Upfloat bekamen;
     # C18-C21 bewerten die SCORE-DIFFERENZ des jeweiligen MDP-Paars (Art. 2.4.13-2.4.16: "Minimise the score
     # differences (taken in descending order) of ..."), nicht den Score eines Spielers: C18/C20 für MDPs, die
-    # vorige/vorvorige Runde einen Downfloat bekamen, C19/C21 für deren Gegner mit Upfloat.
+    # vorige/vorvorige Runde einen Downfloat bekamen, C19/C21 für deren Gegner mit Upfloat. Ein solcher MDP, der
+    # in dieser Bracket UNGEPAART bleibt (Limbo) und erneut weiterfällt, ist schlechter als jede Paarung: bbpPairings
+    # belohnt im gewichteten Matching jede Paarung eines zuvor gefloateten MDPs an der Position seiner Score-Gruppe
+    # (`dutch.cpp`, `computeEdgeWeight`), ein Limbo-MDP bekommt sie nicht. Das zählt hier als unendliche Differenz.
+    c14 = c16 = 0
     c15 = c17 = 0
     flagged_18, flagged_19, flagged_20, flagged_21 = [], [], [], []
+    for r in downfloaters:
+        if r in mdp_ranks:
+            f18, f20 = downfloat_repeat_terms(players[r])
+            if f18:
+                flagged_18.append(_UNPAIRED + players[r].score)
+            if f20:
+                flagged_20.append(_UNPAIRED + players[r].score)
+        else:
+            f14, f16 = downfloat_repeat_terms(players[r])
+            c14 += f14
+            c16 += f16
     for a, b in pairs:
         resident = a if b in mdp_ranks else (b if a in mdp_ranks else None)
         if resident is None:
@@ -170,6 +190,8 @@ def _quality_tuple(
 
     return (c10, c11, c12, c13, c14, c15, c16, c17, c18, c19, c20, c21)
 
+
+_UNPAIRED = 1000.0  # Grundwert für einen ungepaarten MDP in C18/C20: schlechter als jede Differenz, nach seinem Score geordnet
 
 _PERFECT_PREFIX_LEN = 8  # C10..C17 müssen 0 sein für "perfekt"; C18-C21 sind dann automatisch leer
 
@@ -247,6 +269,7 @@ def _search_at_fixed_size(
     mdp_ranks: frozenset[int],
     ctx: BracketContext,
     extra_downfloaters: tuple[int, ...] = (),
+    bsn: dict[int, int] | None = None,
 ) -> Iterator[Candidate]:
     """Art. 3.6: Transposition/Tausch-Suche für EINE feste S1/S2-Aufteilung (fester Paarzahl).
     Liefert (verzögert/lazy) bis zu `MAX_ALTERNATIVES` gültige Kandidaten, stabil nach Qualität sortiert
@@ -259,7 +282,7 @@ def _search_at_fixed_size(
     300 Kandidaten je Aufruf (gemessen: 375 000 Bewertungen in sechs Turnieren) ungenutzt. Die gelieferte
     Folge ist dieselbe wie bei vollständigem Sammeln und Sortieren."""
     n1 = len(s1)
-    splits = _exchange_splits(s1, s2)
+    splits = _exchange_splits(s1, s2, bsn)
     first_s1, first_s2 = next(splits)  # der unveränderte Original-Split
     state = [0]  # [bisher geprüfte rohe Anordnungen] - geteilt über alle Aufteilungen (MAX_RAW_ATTEMPTS)
 
@@ -283,7 +306,7 @@ def _search_at_fixed_size(
         # Die Rekursion will mehr: jetzt vollständig sammeln, wie es sonst von Anfang an geschah.
         seen = []
         state = [0]
-        splits = _exchange_splits(s1, s2)
+        splits = _exchange_splits(s1, s2, bsn)
         start_index = 0
         stopped = False
     else:
@@ -315,7 +338,7 @@ def _search_at_fixed_size(
         # der erste in Erzeugungsreihenfolge gewinnt) liegt dahinter und wird nie gesehen. Gegen
         # bbpPairings gemessen: schon ab 13 Spielern in einer Score-Gruppe, schon in Runde 2.
         # Gezielte Tiefensuche mit Schranke in DERSELBEN Reihenfolge (siehe `_first_perfect_candidates`).
-        for split_index, (split_s1, split_s2) in enumerate(_exchange_splits(s1, s2)):
+        for split_index, (split_s1, split_s2) in enumerate(_exchange_splits(s1, s2, bsn)):
             found, nodes_left = _first_perfect_candidates(
                 split_index, split_s1, split_s2, fixed_pairs, mdp_ranks, ctx, extra_downfloaters, nodes_left
             )
@@ -445,18 +468,24 @@ def _enumerate_valid(
         state[0] += 1
         downfloaters = sorted([ordered[i] for i in range(m) if not used[i]] + list(extra_downfloaters))
         c14 = c16 = 0
+        limbo_18: list[float] = []  # ungepaarte MDPs mit Downfloat der letzten bzw. vorletzten Runde (siehe `_quality_tuple`)
+        limbo_20: list[float] = []
         for r in downfloaters:
-            if r in mdp_ranks:
-                continue
             f14, f16, _, _ = floats(r)
-            c14 += f14
-            c16 += f16
+            if r in mdp_ranks:
+                if f14:
+                    limbo_18.append(_UNPAIRED + players[r].score)
+                if f16:
+                    limbo_20.append(_UNPAIRED + players[r].score)
+            else:
+                c14 += f14
+                c16 += f16
         # Die Markierungslisten sind fast immer leer - dann ist das Sortieren überflüssig.
         quality = (
             sums[0], sums[1], sums[2], sums[3], c14, sums[4], c16, sums[5],
-            tuple(sorted(flagged_18, reverse=True)) if flagged_18 else (),
+            tuple(sorted(flagged_18 + limbo_18, reverse=True)) if (flagged_18 or limbo_18) else (),
             tuple(sorted(flagged_19, reverse=True)) if flagged_19 else (),
-            tuple(sorted(flagged_20, reverse=True)) if flagged_20 else (),
+            tuple(sorted(flagged_20 + limbo_20, reverse=True)) if (flagged_20 or limbo_20) else (),
             tuple(sorted(flagged_21, reverse=True)) if flagged_21 else (),
         )
         pairs = fixed_pairs + list(zip(split_s1, chosen))
@@ -540,9 +569,8 @@ def _first_perfect_candidates(
         if depth == n1:
             leftover = [r for i, r in enumerate(ordered_s2) if not used[i]]
             downfloaters = sorted(leftover + list(extra_downfloaters))
-            resident_downfloaters = [r for r in downfloaters if r not in mdp_ranks]
             pairs = fixed_pairs + list(zip(s1, chosen))
-            quality = _quality_tuple(pairs, resident_downfloaters, mdp_ranks, players, threshold)
+            quality = _quality_tuple(pairs, downfloaters, mdp_ranks, players, threshold)
             if not best or quality < best[0][0]:
                 best[:] = [(quality, tuple(chosen), Candidate(pairs=tuple(pairs), downfloaters=tuple(downfloaters)))]
             return _is_perfect(best[0][0])
@@ -624,6 +652,7 @@ def _search_homogeneous(
     mdp_ranks: frozenset[int],
     ctx: BracketContext,
     extra_downfloaters: tuple[int, ...] = (),
+    bsn: dict[int, int] | None = None,
 ) -> Iterator[Candidate]:
     """Verzögert (lazy): versucht zuerst `max_pairs` Paare (Art. 3.1.2/3.2.2), und erst wenn die
     aufrufende Rekursion ALLE dort gefundenen Kandidaten erfolglos durchprobiert hat, schrittweise
@@ -632,7 +661,7 @@ def _search_homogeneous(
     for n1_attempt in range(max_pairs, -1, -1):
         s1 = tuple(residents[:n1_attempt])
         s2 = tuple(residents[n1_attempt:])
-        yield from _search_at_fixed_size(s1, s2, fixed_pairs, mdp_ranks, ctx, extra_downfloaters)
+        yield from _search_at_fixed_size(s1, s2, fixed_pairs, mdp_ranks, ctx, extra_downfloaters, bsn)
 
 
 def _mdp_pairable_sets(mdps: tuple[int, ...], m1: int, players: dict[int, Player]) -> Iterator[tuple[int, ...]]:
@@ -681,6 +710,7 @@ def solve_bracket(
     würde `_mdp_pairable_sets`s [C7]-Tie-Break (niedrigst bewerteter MDP geht in die Limbo) bei
     unterschiedlich bewerteten MDPs genau VERKEHRT herum greifen (echter, gefundener Bug)."""
     mdps = sorted(mdps, key=lambda r: (-ctx.players[r].score, r))
+    bsn = {rank: index + 1 for index, rank in enumerate(residents)}  # Bracket-Reihenfolge der Residenten (Art. 4.3.2)
     n_residents = len(residents)
     m0 = len(mdps)
     total = n_residents + m0
@@ -693,7 +723,7 @@ def solve_bracket(
         # verwendeten "lazy je Downfloater-Stufe flushen"-Ansatz, damit die Trägheit erhalten bleibt.
         collected: list[tuple[tuple, Candidate]] = []
         current_downfloater_count: int | None = None
-        for candidate in _search_homogeneous(residents, max_pairs, [], frozenset(), ctx):
+        for candidate in _search_homogeneous(residents, max_pairs, [], frozenset(), ctx, bsn=bsn):
             if current_downfloater_count is not None and len(candidate.downfloaters) != current_downfloater_count:
                 yield from _yield_sorted(collected, frozenset(), ctx)
                 collected = []
@@ -807,7 +837,7 @@ def solve_bracket(
                 remainder_max_pairs = len(remainder_residents) // 2
                 downfloater_tier_counts: dict[int, int] = {}
                 for candidate in _search_homogeneous(
-                    remainder_residents, remainder_max_pairs, mdp_pairs, mdp_ranks, ctx, extra_downfloaters=limbo
+                    remainder_residents, remainder_max_pairs, mdp_pairs, mdp_ranks, ctx, extra_downfloaters=limbo, bsn=bsn
                 ):
                     # [MAX_PER_MDP_PERM] begrenzt je DISTINKTER Downfloater-Anzahl-Stufe (nicht roh
                     # über alle Stufen hinweg) UND begrenzt die Anzahl verschiedener Stufen selbst:
@@ -825,8 +855,7 @@ def solve_bracket(
                     if tier_count == 0 and len(downfloater_tier_counts) >= MAX_PER_MDP_PERM:
                         break  # genug verschiedene Stufen schon gesehen
                     downfloater_tier_counts[n_downfloaters] = tier_count + 1
-                    resident_downfloaters = [r for r in candidate.downfloaters if r not in mdp_ranks]
-                    quality = _quality_tuple(list(candidate.pairs), resident_downfloaters, mdp_ranks, ctx.players, ctx.topscorer_threshold)
+                    quality = _quality_tuple(list(candidate.pairs), list(candidate.downfloaters), mdp_ranks, ctx.players, ctx.topscorer_threshold)
                     # [C6] zuerst (weniger Downfloater = besser), dann [C7] (Downfloater-Scores
                     # absteigend sortiert minimieren), erst danach C10-C21: verschiedene mdp_perm-
                     # Restgruppen können unterschiedlich viele Paare UND unterschiedlich hoch

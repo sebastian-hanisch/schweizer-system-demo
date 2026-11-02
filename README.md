@@ -23,13 +23,13 @@ Rundenturnier (Stück 1, gebaut+gepusht+deployed)
 | Gelten die absoluten Kriterien (C1-C3) immer? | ✅ **Beweisbar ja** – eine verbotene Paarung wird nie als Kandidat gebildet (`ss_compat.py`), kein separater Check nötig. |
 | Wird Runde 1 (frisches Feld) korrekt nachgebildet? | ✅ **100 %** – die "obere Hälfte gegen untere Hälfte"-Standardaufteilung (Art. 3.3.1, wörtlich aus dem Regeltext) stimmt exakt mit bbpPairings überein (verifiziert für 4–10 Spieler). |
 | Stimmen die zwei mitgelieferten bbpPairings-Testfixturen exakt? | ✅ `dutch_2025_C5` und `dutch_2025_C9` (echte FIDE-Testfälle) werden Zahl für Zahl reproduziert. |
-| Wie genau sind die Qualitätskriterien (C6-C21) insgesamt? | ✅ **~99 %** exakte Übereinstimmung mit bbpPairings auf zufälligen Mehrrundenturnieren (4–16 Spieler, 1–4 Runden, 1427 Vergleiche zum Zeitpunkt der letzten Messung; die heutige Stichprobe erzeugt 1430 Fälle); auf einer bewusst härteren Stichprobe (6–19 Spieler, bis 6 Runden, mehr Nähe an [C1]-Erschöpfung) **~97 %**. Die restliche Lücke ist ein bekanntes, aus bbpPairings' eigenem Quellcode verstandenes Phänomen (echte Gleichstände, die ein iteratives Neu-Lösen bräuchten) - keine unerklärte Restlücke. |
-| Wie genau auf größeren Feldern (8–31 Spieler, 5–9 Runden)? | ✅ **100 %** im bbpPairings-treuen Modus (574 von 574 Runden, mit Beschleunigung 576 von 576, jeweils Paarung, Freilos und Farben), **98,6 %** im Regeltext-Modus (566 von 574), gemessen auf Runden, die bbpPairings selbst fortführt, damit beide Seiten denselben Stand sehen. Die kleineren Felder oben bleiben bei ihren Zahlen; diese Messung ist neu und die einzige mit größeren Feldern. |
+| Wie genau sind die Qualitätskriterien (C6-C21) insgesamt? | ✅ **100 %** exakte Übereinstimmung mit bbpPairings in beiden Modi auf zufälligen Mehrrundenturnieren (4–16 Spieler, 1–4 Runden, 1430 von 1430 Vergleichen) und auf einer bewusst härteren Stichprobe (6–19 Spieler, bis 6 Runden, 1994 von 1994). Im Regeltext-Modus waren es vor den Korrekturen dieser Reihe ~99 % und ~97 %. Endliche Stichproben, kein Beweis. |
+| Wie genau auf größeren Feldern (8–31 Spieler, 5–9 Runden)? | ✅ **100 %** in beiden Modi: 574 von 574 Runden, mit Beschleunigung 576 von 576, jeweils Paarung, Freilos und Farben, gemessen auf Runden, die bbpPairings selbst fortführt, damit beide Seiten denselben Stand sehen. Im Regeltext-Modus waren es 94,4 % vor dieser Reihe von Korrekturen (siehe unten). |
 | Stimmt die Farbzuteilung (Art. 5.2) mit bbpPairings? | ✅ **Exakt**: 0 Abweichungen auf 5068 Paaren der Referenz. Davor 76 (1,5 %): Art. 5.2.3 war als „jeder wechselt zu seiner letzten Farbe“ umgesetzt statt als Vergleich der Historien (siehe unten). |
 | Stimmt die Spitzenreiter-Regel (Art. 1.8, C3-Ausnahme)? | ✅ **Seit der Korrektur ja.** Die Demo rechnete die Grenze als Hälfte der *Gesamt*-Runden und ließ die Ausnahme in jeder Runde zu. Richtig, und so rechnet bbpPairings (`dutch.cpp`, `compatible`): Hälfte der *bereits gespielten* Runden, und nur in der letzten Runde. Das war die Ursache der letzten 4 von 574 Abweichungen im bbpPairings-treuen Modus (99,3 % → 100 %); im Regeltext-Modus 94,1 % → 94,4 %. |
-| Wie schnell ist der Regeltext-Modus? | ✅ Auf 31–32 Spielern und 9 Runden (CPU-Zeit je Turnier, 16 Turniere, andere Last auf der Maschine): Median **1,2 s**, schlechtester Fall **2,4 s**. Der Stand vor der Bracket-Suche und der zwei Phasen brauchte 2,0 s und 5,6 s bei 94,4 % Genauigkeit. Möglich wurde das, weil [C5]-[C9] nur von der Menge der herausfallenden Spieler abhängen: die Kette dieser Mengen wird billig bestimmt (Matching-Test statt Kandidatenliste), die farbbewertete Kandidatenliste nur einmal je Block entlang des gewählten Wegs aufgebaut (siehe unten). |
+| Wie schnell ist der Regeltext-Modus? | ✅ Auf 31–32 Spielern und 9 Runden (CPU-Zeit je Turnier, 12–16 Turniere, andere Last auf der Maschine): Median **1,2 s**, schlechtester Fall **2,7 s**. Vor dieser Reihe brauchte er 1,8–1,9 s und 5,0 s bei 94,4 % Genauigkeit. Möglich wurde das, weil [C5]-[C9] nur von der Menge der herausfallenden Spieler abhängen: die Kette dieser Mengen wird billig bestimmt (Matching-Test statt Kandidatenliste), die farbbewertete Kandidatenliste nur einmal je Block entlang des gewählten Wegs aufgebaut (siehe unten). |
 | Bleibt der Farbausgleich fair? | ✅ Weiß/Schwarz-Differenz bleibt in jedem gemessenen Turnier bei höchstens 1 je Spieler. |
-| Kostet die Baku-Beschleunigung Genauigkeit? | ✅ **Nein**: auf 576 von bbpPairings fortgeführten Runden (8–31 Spieler, 5–9 Runden) stimmen Paarungen, Freilos und Farben im bbpPairings-treuen Modus zu 100 % überein (ohne Beschleunigung ebenfalls), im Regeltext-Modus zu 97,9 % (ohne 98,6 %). |
+| Kostet die Baku-Beschleunigung Genauigkeit? | ✅ **Nein**: auf 576 von bbpPairings fortgeführten Runden (8–31 Spieler, 5–9 Runden) stimmen Paarungen, Freilos und Farben in beiden Modi zu 100 % überein (ohne Beschleunigung ebenfalls). |
 
 ## Baku-Beschleunigung (FIDE C.04.7)
 
@@ -331,56 +331,59 @@ nur davon ab, **wer** aus jedem Block herausfällt, nicht davon, wie der Rest ge
 1. **Kette der Downfloater-Mengen** (dynamische Programmierung über Zustände „Block k, hereinfallende Spieler“):
    je Zustand werden die möglichen Mengen herausfallender Spieler nach ([C6] Zahl, [C7] Scores absteigend)
    sortiert und der Reihe nach geprüft. Lässt sich der Rest des Blocks perfekt paaren (Matching-Test auf
-   Bitmasken, keine Kandidatenliste), und wie gut wird der Rest der Runde (rekursiv, gemerkt)? Die erste Gruppe
-   mit mindestens einer tragfähigen Menge gewinnt, darin die Mengen mit dem besten Rest-Profil: das ist [C8],
-   über die ganze Restkette. Das Freilos regelt eine Obergrenze für (Score, ungespielte Partien) des Empfängers
+   Bitmasken, keine Kandidatenliste)? Die erste Gruppe mit mindestens einer tragfähigen Menge gewinnt, darin die Mengen,
+   bei denen der FOLGENDE Block den besten [C6]/[C7]-Schlüssel erreicht: das ist [C8], und zwar nur für den nächsten
+   Block, wie es Art. 2.4.3 sagt. Das Freilos regelt eine Obergrenze für (Score, ungespielte Partien) des Empfängers
    ([C5], [C9]), die steigt, bis eine vollständige Runde existiert.
-2. **Paarungen** entlang der gewählten Kette: je Block der Kandidatenstrom der Bracket-Suche
-   (sortiert nach C10-C21), der erste Kandidat, dessen Menge zu den besten aus Phase 1 gehört, gewinnt.
+2. **Paarungen** entlang der gewählten Kette: je Block der Kandidatenstrom der Bracket-Suche (sortiert nach C10-C21),
+   dazu eine gezielte Suche für die gewählten Mengen, falls der Strom keinen perfekten Kandidaten enthält. Bei Gleichstand
+   entscheidet die Erzeugungsreihenfolge des Regeltexts (MDP-Zuordnung aufsteigend, dann S1 gegen Anordnungen von S2).
 
-Der Weg dorthin, mit den Messwerten (31–32 Spieler, 9 Runden, CPU-Median je Turnier):
+Der Weg dorthin, mit den Messwerten (31–32 Spieler, 9 Runden, CPU-Median je Turnier; Genauigkeit auf 574 Runden):
 
-| Stand | Genauigkeit (574 Runden) | Zeit |
+| Stand | Genauigkeit | Zeit |
 |---|---|---|
-| Aufzählung, erster Kandidat mit lösbarem Rest | 94,4 % | 2,0 s |
-| + Bracket-Suche (bester statt erste 300 gültige), + Zwischenspeicher, lazy | 96,5 % | 1,3 s |
+| Aufzählung, erster Kandidat mit lösbarem Rest | 94,4 % | 1,9 s |
+| + Bracket-Suche (bester statt erste 300 gültige), Zwischenspeicher, lazy | 96,5 % | 1,3 s |
 | + C18–C21 als Score-Differenzen | 96,9 % | 1,3 s |
 | [C8] über das volle Rest-Profil in der Rekursion | 97,7 % | 4–5 s |
 | zwei Phasen (`ss_chain.py`) | 97,7 % | 1,1 s |
-| + Tie-Break `_downfloat_cascade_depth_bias` entfernt (war Ersatz für C8), gezielte Suche je gewählter Menge in der Erzeugungsreihenfolge des Regeltexts | **98,6 %** | **1,2 s** |
+| + Tie-Break `_downfloat_cascade_depth_bias` entfernt (war Ersatz für C8), gezielte Suche je gewählter Menge | 98,6 % | 1,2 s |
+| + ungepaarter MDP mit Downfloat der Vorrunde ist schlechter als jede Paarung (C18/C20) | 99,5 % | 1,2 s |
+| + Tauschreihenfolge nach BSN statt nach Rängen (Art. 4.3.2) | 99,8 % | 1,2 s |
+| + [C8] nur für den folgenden Block | **100,0 %** | **1,2 s** |
 
 Verworfen wurden dabei: eine Obergrenze für die Zahl verglichener Mengen (97,4 % bei etwa 2 s), die Vorausschau über
 einen Block als Auswahl (96,3 %, langsamer) und die Vorausschau als Schranke (5,5 s, die Schranke greift selten).
 Der Aufbau der Kandidatenliste je Zustand war das Teure, nicht die Auswahl selbst.
 
-Geprüft ist `ss_chain.py` unabhängig: `tests/test_chain.py` zählt auf kleinen Zufallsständen **alle** gültigen
-vollständigen Runden auf und verlangt, dass `solve_round` genau eine mit dem kleinsten (Freilos-Schlüssel,
-[C6]/[C7]-Profil) liefert. Zwei gezielte Störungen (C8-Vergleich aus, keine Reduktion im ersten Block) lassen ihn
-scheitern.
+**Die Funde im Einzelnen** (alle behoben, jeder mit Regressionstest gegen bbpPairings):
 
-**Zwei weitere Funde beim Schließen der Lücke** (beide behoben):
+- **C18–C21** bewerteten die *Scores einzelner Spieler* statt der *Score-Differenzen* der MDP-Paare (Art. 2.4.13–2.4.16).
+  Innerhalb einer Bracket haben alle Residenten denselben Score, die alte Größe unterschied daher nie zwischen Kandidaten.
+- **Der Kandidatenstrom ist gedeckelt** und ließ in einem Block mit zwei hereingefloateten Spielern die farblich perfekte
+  Paarung ganz aus. Die gezielte Suche je gewählter Menge behebt das, mit der Erzeugungsreihenfolge des Regeltexts als
+  Tie-Break.
+- **`_downfloat_cascade_depth_bias`** (bevorzuge den Downfloater, der den nächsten Block noch erreicht) war ein Ersatz für ein
+  fehlendes C8 und lag bei exakt gleich guten Kandidaten gegen bbpPairings falsch. `_mdp_downfloat_bias` dagegen hilft und bleibt.
+- **Ungepaarte MDPs** (Limbo) mit Downfloat der Vorrunde sind in bbpPairings schlechter als jede Paarung: das gewichtete
+  Matching (`dutch.cpp`, `computeEdgeWeight`) belohnt jede Paarung eines zuvor gefloateten MDP an der Position seiner
+  Score-Gruppe, ein Limbo-MDP bekommt sie nicht. Das war der größte einzelne Sprung (98,6 → 99,5 %).
+- **Tauschreihenfolge (Art. 4.3.2)**: verglichen werden BSN (Bracket-Folgenummern 1, 2, 3, …), nicht Ränge.
+  Bei lückigen Rängen (etwa 3, 4, 10, 13, 15) kam dadurch ein anderer Tausch zuerst.
+- **[C8] nur für den folgenden Block**: der Vergleich über die ganze Restkette ließ ein besseres [C7] weit unten die Farbe
+  im aktuellen Block überstimmen, bbpPairings nimmt zu Recht die bessere Farbe (fünf Fälle).
+- **Spitzenreiter-Grenze und Farbzuteilung (Art. 5.2.3)** aus den Läufen davor: siehe die Zeilen oben.
 
-- Der Kandidatenstrom der Bracket-Suche ist gedeckelt und ließ in einem Block mit zwei hereingefloateten Spielern die
-  farblich perfekte Paarung ganz aus. `ss_chain` sucht deshalb für die gewählten Mengen zusätzlich gezielt (Tiefensuche
-  mit Schranke) und ersetzt den Kandidaten aus dem Strom nur, wenn er nicht perfekt ist und die Suche etwas Besseres
-  oder in der Erzeugungsreihenfolge Früheres findet. Bei gleich guten Kandidaten verschiedener Mengen entscheidet die
-  Reihenfolge des Regeltexts: erst die MDP-Zuordnung aufsteigend, dann der Rest als S1 gegen Anordnungen von S2.
-- `_downfloat_cascade_depth_bias` (bevorzuge den Downfloater, der den nächsten Block noch erreicht) war ein Ersatz für ein
-  fehlendes C8, und bei exakt gleich guten Kandidaten lag er gegen bbpPairings falsch. Ohne ihn stimmen 565 statt 561
-  (und 563 statt 562 mit Beschleunigung) Runden. `_mdp_downfloat_bias` dagegen hilft (ohne ihn 560 statt 561) und bleibt.
+**Geprüft** ist `ss_chain.py` unabhängig: `tests/test_chain.py` zählt auf kleinen Zufallsständen **alle** gültigen
+vollständigen Runden auf und verlangt, dass `solve_round` genau eine mit dem kleinsten (Freilos-Schlüssel, [C6]/[C7] des
+ersten Blocks, [C6]/[C7] des zweiten Blocks) liefert. Zwei gezielte Störungen (C8-Vergleich aus, keine Reduktion im ersten
+Block) lassen ihn scheitern. Dazu zehn Regressionsfälle gegen bbpPairings in `tests/test_acceleration.py`, vier davon
+mit Baku-Beschleunigung.
 
-**Verbleibend**: 8 Abweichungen in 574 Runden auf größeren Feldern. Bei sieben sind [C6]/[C7] und die Farbsummen
-gleich. Ein Beispiel (14 Spieler, 7 Runden, Runde 6) deutet auf [C18]: bbpPairings paart den MDP, der die Runde zuvor
-einen Downfloat bekam, mit der kleineren Score-Differenz (0,5) und lässt den anderen weiterfallen, meine Qualität
-bewertet C18 nur innerhalb des Blocks und sieht beide Wege gleich oder den anderen vorn. bbpPairings bewertet das
-offenbar über die ganze Kette; das passt nicht in die Block-für-Block-Bewertung und ist nicht umgesetzt (Vermutung
-aus einem Fall, nicht an allen sieben geprüft). Bei einer (14 Spieler, 9 Runden, Saat 0, letzte Runde) sieht meine
-Kriterienprüfung die Engine sogar vorn und bbpPairings nimmt trotzdem die farblich bessere Paarung; dieser Fall ist
-nicht aufgeklärt.
-
-**C18–C21 gefunden und behoben**: Die Qualität bewertete C18–C21 mit den *Scores einzelner Spieler* statt mit den
-*Score-Differenzen* der MDP-Paare, die der Regeltext verlangt (Art. 2.4.13–2.4.16). Innerhalb einer Bracket haben
-alle Residenten denselben Score, die alte Größe unterschied daher nie zwischen Kandidaten.
+**Grenze der Aussage**: „100 %“ heißt 100 % auf diesen Stichproben (1430 + 1994 Runden auf kleinen, 574 + 576 auf größeren
+Feldern), nicht „bewiesen gleich“. Andere Feldgrößen, Rundenzahlen oder Ergebnisverteilungen können weitere Abweichungen
+zeigen. Mutationstest und `text_lint` sind für diese Reihe nicht gelaufen.
 
 ## Modell und Verfahren
 
@@ -394,7 +397,7 @@ alle Residenten denselben Score, die alte Größe unterschied daher nie zwischen
   zuletzt Ranglistenposition.
 - **Quellen**: [handbook.fide.com/chapter/C0403202602](https://handbook.fide.com/chapter/C0403202602) (FIDE-
   Regeltext), [github.com/BieremaBoyzProgramming/bbpPairings](https://github.com/BieremaBoyzProgramming/bbpPairings)
-  (Referenz-Engine, Quellcode und Testfixturen).
+  (Referenz-Engine, Version 6.0.0, Quellcode und Testfixturen).
 
 ## Verifikation
 

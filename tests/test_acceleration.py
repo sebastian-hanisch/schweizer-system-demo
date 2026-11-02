@@ -241,7 +241,7 @@ def test_matching_mode_agrees_exactly_without_acceleration_on_larger_fields():
 
 @needs_oracle
 def test_ruleset_mode_agrees_with_bbppairings_on_accelerated_tournaments():
-    # Gemessen 97,9 % (564 von 576) - ohne Beschleunigung 98,6 %: die Beschleunigung kostet höchstens ein paar Runden.
+    # Gemessen 100 % (576 von 576) - ohne Beschleunigung 100 % (574 von 574).
     # Diese Teilmenge: 100 % (79 von 79); Schwelle mit Abstand nach unten.
     rate, total, wrong_colours = _agreement(RULESET, sizes=(8, 11, 14), round_counts=(5, 9), seeds=range(2))
     assert total >= 40
@@ -253,7 +253,7 @@ def test_ruleset_mode_agrees_with_bbppairings_on_accelerated_tournaments():
 def test_ruleset_mode_agrees_with_bbppairings_on_larger_fields_without_acceleration():
     # Regression der Bracket-Suche (ss_bracket: perfekter bzw. bester Kandidat auch jenseits der ersten 300 gültigen
     # Anordnungen; Obergrenze zählt nur Kandidaten der besten Stufe). Vorher 94,4 % auf der vollen Messreihe, jetzt
-    # 98,6 %; diese Teilmenge 96,6 % (317 von 328), alle Farben gleich.
+    # 100 %; diese Teilmenge hier (4 Saatwerte, anderes Ausgangsmaterial als die Messreihe): 96,6 % (317 von 328), alle Farben gleich.
     rate, total, wrong_colours = _agreement(
         RULESET, sizes=(8, 11, 14, 17), round_counts=(5, 7, 9), seeds=range(4), accelerate=False
     )
@@ -262,19 +262,21 @@ def test_ruleset_mode_agrees_with_bbppairings_on_larger_fields_without_accelerat
     assert wrong_colours == 0
 
 
-def _oracle_led_state(n, rounds, seed, played):
+def _oracle_led_state(n, rounds, seed, played, accelerate=False):
     """Stand nach `played` Runden eines Turniers, das bbpPairings selbst fortführt (dieselben Zufallszahlen wie in
     der Messreihe, die diese Fälle gefunden hat: je Partie 42 % Weiß, 42 % Schwarz, 16 % Remis)."""
     from ss_model import DOWN, UP, Pairing, RoundResult
 
     rng = random.Random(seed * 1000 + n * 10 + rounds)
+    accs = acc.accelerations_by_rank(n, rounds) if accelerate else None
     players = {r: Player(rank=r) for r in range(1, n + 1)}
     for rnd in range(1, played + 1):
-        theirs, bye = run_bbppairings(players, rnd, exe_path=EXE_PATH, total_rounds=rounds)
+        theirs, bye = run_bbppairings(players, rnd, exe_path=EXE_PATH, total_rounds=rounds, accelerations=accs)
+        view = acc.with_pairing_scores(players, acc.virtual_points_by_rank(n, rounds, rnd)) if accelerate else players
         floats = {}
         for w, b in theirs:
-            if players[w].score != players[b].score:
-                high, low = (w, b) if players[w].score > players[b].score else (b, w)
+            if view[w].score != view[b].score:
+                high, low = (w, b) if view[w].score > view[b].score else (b, w)
                 floats[high], floats[low] = DOWN, UP
         if bye is not None:
             floats[bye] = DOWN
@@ -288,17 +290,27 @@ def _oracle_led_state(n, rounds, seed, played):
 
 @needs_oracle
 @pytest.mark.parametrize(
-    "n, rounds, seed, round_no",
+    "n, rounds, seed, round_no, accelerate",
     [
-        (14, 9, 2, 3),  # Strom der Bracket-Suche ließ die farblich perfekte Paarung aus; Erzeugungsreihenfolge bei Gleichstand
-        (11, 9, 2, 6),  # [C8]: gleich gute Downfloater-Mengen, der Rest der Runde entscheidet
-        (11, 9, 3, 7),  # [C7] des aktuellen Blocks steht vor [C8] des nächsten
-        (31, 5, 3, 2),  # Runde 2: Farbfehler in der ersten gültigen Anordnung, die perfekte steht dahinter
+        (14, 9, 2, 3, False),  # Strom der Bracket-Suche ließ die farblich perfekte Paarung aus; Erzeugungsreihenfolge bei Gleichstand
+        (11, 9, 2, 6, False),  # [C8]: gleich gute Downfloater-Mengen, der nächste Block entscheidet
+        (11, 9, 3, 7, False),  # [C7] des aktuellen Blocks steht vor [C8] des nächsten
+        (31, 5, 3, 2, False),  # Runde 2: Farbfehler in der ersten gültigen Anordnung, die perfekte steht dahinter
+        (17, 9, 1, 4, False),  # Tausch-Reihenfolge nach BSN statt nach Rängen (Art. 4.3.2)
+        (14, 7, 3, 6, False),  # ungepaarter MDP mit Downfloat der Vorrunde ist schlechter als jede Paarung ([C18])
+        (14, 9, 0, 9, False),  # [C8] nur für den folgenden Block: ein tieferes [C7] darf die Farbe nicht überstimmen
+        (14, 9, 2, 5, True),  # dasselbe mit Baku-Beschleunigung (Paarungs-Score statt Score)
+        (14, 9, 0, 7, True),
+        (20, 7, 1, 7, True),
     ],
 )
-def test_ruleset_engine_reproduces_cases_that_used_to_differ_from_bbppairings(n, rounds, seed, round_no):
-    players = _oracle_led_state(n, rounds, seed, round_no - 1)
-    theirs, bye = run_bbppairings(players, round_no, exe_path=EXE_PATH, total_rounds=rounds)
-    mine = ss_engine.pair_round(players, round_no, total_rounds=rounds)
+def test_ruleset_engine_reproduces_cases_that_used_to_differ_from_bbppairings(n, rounds, seed, round_no, accelerate):
+    players = _oracle_led_state(n, rounds, seed, round_no - 1, accelerate)
+    accs = acc.accelerations_by_rank(n, rounds) if accelerate else None
+    theirs, bye = run_bbppairings(players, round_no, exe_path=EXE_PATH, total_rounds=rounds, accelerations=accs)
+    if accelerate:
+        mine = acc.pair_round_accelerated(ss_engine.pair_round, players, round_no, rounds)
+    else:
+        mine = ss_engine.pair_round(players, round_no, total_rounds=rounds)
     assert {(p.white, p.black) for p in mine.pairings} == {tuple(p) for p in theirs}
     assert mine.bye == bye

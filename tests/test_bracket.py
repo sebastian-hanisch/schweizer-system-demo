@@ -93,8 +93,7 @@ def _reference_enumeration(split_s1, split_s2, fixed_pairs, mdp_ranks, ctx, extr
         pairs = fixed_pairs + list(zip(split_s1, perm))
         downfloaters = sorted(sorted(set(split_s2) - set(perm)) + list(extra_downfloaters))
         if all(compatible(ctx.players[a], ctx.players[b], ctx.topscorer_threshold) for a, b in pairs):
-            residents = [r for r in downfloaters if r not in mdp_ranks]
-            quality = B._quality_tuple(pairs, residents, mdp_ranks, ctx.players, ctx.topscorer_threshold)
+            quality = B._quality_tuple(pairs, downfloaters, mdp_ranks, ctx.players, ctx.topscorer_threshold)
             out.append((quality, perm, tuple(pairs), tuple(downfloaters)))
     return out, raw
 

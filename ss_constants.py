@@ -20,9 +20,8 @@ ENGINE_MODE_LABELS = {
 ENGINE_MODE_HELP = {
     ENGINE_MODE_RULESET: (
         "Bracket-für-Bracket, wörtliche Transposition/Tausch-Suche nach FIDE Art. 3+4 - jeder Schritt "
-        "einzeln nachvollziehbar. Gemessen ca. 99 %/97 % exakte Übereinstimmung mit bbpPairings (auf größeren Feldern 99 %); der "
-        "Rest sind Suchtiefen-Grenzen und Gleichstände, die die Referenz über einen eigenen, nicht im Regeltext "
-        "stehenden internen Mechanismus auflöst (siehe unten)."
+        "einzeln nachvollziehbar. Gemessen 100 % exakte Übereinstimmung mit bbpPairings auf allen Stichproben "
+        "(kleine und größere Felder; früher ca. 99 %/97 %). Ein endlicher Stichprobenbefund, kein Beweis."
     ),
     ENGINE_MODE_MATCHING: (
         "Bildet bbpPairings' EIGENEN Algorithmus nach: EIN einziges, rundenweit fortgeführtes gewichtetes "

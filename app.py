@@ -48,15 +48,28 @@ Teilnehmer viele Partien spielen. Diese Demo baut den Paarungsalgorithmus **nach
 gegen [bbpPairings](https://github.com/BieremaBoyzProgramming/bbpPairings), die offizielle, FIDE-anerkannte
 Referenz-Engine. In der Seitenleiste lässt sich zwischen zwei Paarungs-Engines umschalten - Schritt-für-Schritt
 erklärbar nach dem Regeltext, oder exakt nach bbpPairings' eigenem Mechanismus (siehe "Wie genau ist die
-Nachbildung wirklich?" unten für den Unterschied).
+Nachbildung wirklich?" unten für den Unterschied). Wer neu im Thema ist, öffnet zuerst „💬 In einfachen Worten“.
 """
 )
+
+# erklaerseite:einfach:start (erzeugt von tools/set_demo_explainer.py (Website-Repo) aus tools/content/explainers/schweizer-system-erklaert.json, nicht von Hand ändern)
+with st.expander("💬 In einfachen Worten"):
+    st.markdown(
+        """
+Bei vielen Spielern und wenigen Terminen kann nicht jeder gegen jeden spielen. Das Schweizer System löst deshalb in jeder Runde Spieler mit ähnlichem Punktestand gegeneinander aus: Wer gewinnt, trifft auf andere Gewinner, wer verliert, auf andere Verlierer. Dazu kommen feste Regeln: Zwei Spieler treffen nie zweimal aufeinander, die Farben wechseln möglichst ab, und bei einer ungeraden Zahl bekommt einer spielfrei, nie zweimal derselbe.
+
+Die Demo lost zwei Wege aus, einen, der dem Regeltext Schritt für Schritt folgt, und einen, der das offizielle Referenzprogramm nachbaut. Beide vergleicht sie mit diesem Programm. Zusätzlich lässt sich die Baku-Beschleunigung zuschalten, bei der die obere Hälfte der Setzliste in den ersten Runden gedachte Zusatzpunkte bekommt.
+
+[Ausführlich und verständlich erklärt, mit Fachteil](https://sebastianhanisch.net/schweizer-system-erklaert.html)
+        """
+    )
+# erklaerseite:einfach:end
 st.caption(
     "Anders als die Fall-Demos im Portfolio, die an einem Anwendungsfall mehrere Verfahren vergleichen, zeigt "
     "diese Demo - drittes Stück der Turnierplanung-Linie der \"Konzepte\"-Reihe - **ein** Verfahren "
     "an einem wachsenden Beispiel: die absoluten Kriterien (C1-C3) gelten hier IMMER exakt, die Feinheiten der "
-    "Qualitätskriterien (C6-C21) sind eine gute Näherung mit einer ehrlich gemessenen, nicht behaupteten "
-    "Übereinstimmungsrate gegenüber der echten Referenz-Engine."
+    "Qualitätskriterien (C6-C21) stimmen auf allen gemessenen Stichproben mit der echten Referenz-Engine überein "
+    "(endliche Stichproben, kein Beweis; die Übereinstimmungsrate steht unten, ehrlich gemessen, nicht behauptet)."
 )
 
 with st.expander("So funktioniert das Schweizer System (FIDE Dutch)", expanded=True):
@@ -166,21 +179,17 @@ auf tausenden zufälligen Testrunden geprüft - die beiden Modi liegen hier bewu
 )
 mc1, mc2 = st.columns(2)
 if engine_mode == C.ENGINE_MODE_RULESET:
-    mc1.metric("Exakte Übereinstimmung (Qualitätskriterien)", "~99 %", help="Gemessen an zufälligen Mehrrundenturnieren, 4-16 Spieler, 1-4 Runden (zuletzt gemessen: 1420 von 1427 Vergleichen übereinstimmend; die heutige Stichprobe erzeugt 1430 Fälle) - auf einer bewusst härteren Stichprobe (6-19 Spieler, bis 6 Runden) ~97 %. Auf größeren Feldern (8-31 Spieler, 5-9 Runden; 574 von bbpPairings fortgeführte Runden) 98,6 % bei Paarung und Freilos; die Farben stimmen bei übereinstimmender Paarung in jeder Runde. Siehe README für die vollständige Methodik.")
+    mc1.metric("Exakte Übereinstimmung (Qualitätskriterien)", "100 %", help="Gemessen an zufälligen Mehrrundenturnieren, 4-16 Spieler, 1-4 Runden (1430 von 1430 Vergleichen) UND einer bewusst härteren Stichprobe (6-19 Spieler, bis 6 Runden, 1994 von 1994). Auch auf größeren Feldern (8-31 Spieler, 5-9 Runden; 574 von bbpPairings fortgeführte Runden, mit Beschleunigung 576) stimmen Paarung, Freilos und Farben in jeder Runde überein. Das sind endliche Stichproben, kein Beweis. Siehe README für die vollständige Methodik und den Weg dorthin (früher ~99 %/97 %).")
     mc2.metric("Übereinstimmung bei Runde 1 (frisches Feld)", "100 %", help="Die 'obere Hälfte gegen untere Hälfte'-Standardaufteilung wird exakt nachgebildet.")
     st.markdown(
         """
 Die Runde wird in zwei Phasen gelöst: Zuerst wird die Kette der Downfloater-Mengen nach [C5]-[C9] bestimmt
-([C6]/[C7] je Bracket von oben nach unten, [C8] über die GANZE restliche Kette), erst danach die Paarungen und
-Farben ([C10]-[C21]) unter den Paarungen, die zu derselben Menge führen. Der größere Teil der früheren
-Abweichung war gar kein Tie-Break-Problem, sondern eine Suchbreiten-Grenze und eine zu strenge Stufenfolge. Der
-verbliebene Rest besteht auf größeren Feldern (8 Abweichungen in 574 Runden) aus Gleichständen bei [C6]/[C7]
-(in keinem Fall liegt die Referenz dort besser) - die Referenz-Engine löst SOLCHE Reste über ein
-einziges, für die GANZE Runde (nicht nur eine Bracket) fortgeführtes gewichtetes Matching-Objekt - ein
-grundlegend anderer Mechanismus als die Bracket-für-Bracket-Suche hier (Art. 3+4 wörtlich). Ein Portierungs-
-versuch DIESES Mechanismus als nachträglicher Tie-Break auf der Bracket-für-Bracket-Architektur brachte
-GEMESSEN keinen Gewinn - erst der **vollständige** Nachbau (⚙️ Einstellungen → bbpPairings-treuer Modus)
-schließt die Lücke, dafür ohne die Schritt-für-Schritt-Nachvollziehbarkeit dieses Modus hier."""
+([C6]/[C7] je Bracket von oben nach unten, [C8] für den FOLGENDEN Bracket, wie es der Regeltext sagt), erst danach
+die Paarungen und Farben ([C10]-[C21]) unter den Paarungen, die zu derselben Menge führen. Die frühere Lücke zur
+Referenz-Engine war kein Tie-Break-Problem, sondern eine Reihe von Umsetzungsfehlern: eine Suchbreiten-Grenze, eine zu
+strenge Stufenfolge, ein C8, das zu tief schaute, Tauschreihenfolgen nach Rängen statt nach Bracket-Folgenummern und
+eine falsche Bewertung ungepaarter MDPs. Auf allen gemessenen Stichproben stimmt dieser Modus jetzt mit bbpPairings
+überein - und bleibt trotzdem Schritt für Schritt nachvollziehbar, anders als der bbpPairings-treue Modus."""
     )
 else:
     mc1.metric("Exakte Übereinstimmung (Qualitätskriterien)", "100 %", help="Gemessen an zufälligen Mehrrundenturnieren, 4-16 Spieler, 1-4 Runden (1430 Vergleiche) UND einer bewusst härteren Stichprobe (6-19 Spieler, bis 6 Runden, 1994 Vergleiche) - beide exakt 100 %. Auch auf größeren Feldern (8-31 Spieler, 5-9 Runden; 574 von bbpPairings fortgeführte Runden, mit Beschleunigung 576) stimmen Paarung, Freilos und Farben in jeder Runde überein. Siehe README für die vollständige Methodik.")
@@ -191,15 +200,34 @@ Dieser Modus bildet nicht den FIDE-Regeltext nach, sondern bbpPairings' **eigene
 EIN einziges gewichtetes Matching-Objekt wird für die GESAMTE Runde (alle Spieler, nicht nur eine Bracket)
 einmal angelegt und dann bracket-für-bracket mit inkrementell angepassten Kantengewichten weitergelöst -
 direkt aus dem geklonten `bbpPairings`-Quellcode portiert (`computeEdgeWeight`, `dutch.cpp`) und gegen die
-Referenz-Engine verifiziert. Der Preis für die exakte Übereinstimmung: die einzelne Paarungsentscheidung ("warum
-spielt X gegen Y") ist hier NICHT mehr in einzelne, für sich nachvollziehbare Regelschritte zerlegbar wie im
-Regeltext-Modus, sondern das Ergebnis eines globalen Optimierungslaufs - ein bewusster Erklärbarkeit-gegen-
-Exaktheit-Trade-off, kein "besser" oder "schlechter" an sich."""
+Referenz-Engine verifiziert. Beide Modi stimmen auf allen gemessenen Stichproben mit der Referenz überein; der Unterschied liegt in der Erklärbarkeit:
+die einzelne Paarungsentscheidung ("warum spielt X gegen Y") ist hier NICHT in einzelne, für sich nachvollziehbare
+Regelschritte zerlegbar wie im Regeltext-Modus, sondern das Ergebnis eines globalen Optimierungslaufs. Das ist kein
+"besser" oder "schlechter" an sich."""
     )
 
 st.markdown("---")
 
 with st.expander("📐 Mathematische Formulierung"):
+    # erklaerseite:lesehilfe:start (erzeugt von tools/set_demo_explainer.py (Website-Repo) aus tools/content/explainers/schweizer-system-erklaert.json, nicht von Hand ändern)
+    st.markdown(
+        r"""
+**Lesehilfe.** Gegeben sind $N$ Spieler mit Wertungszahlen, $R$ geplante Runden und ein bisheriger Punktestand $s_i$. Gesucht ist in jeder Runde eine Paarung, die die Regeln des FIDE Dutch Systems erfüllt; verglichen wird sie mit der Auslosung des Referenzprogramms bbpPairings.
+
+| Symbol | Bedeutung |
+|---|---|
+| $N$, $R$ | Zahl der Spieler und der geplanten Runden |
+| $s_i$ | echter Punktestand des Spielers $i$ |
+| $G_A$ | obere Hälfte der Setzliste (Gruppe der Baku-Beschleunigung) |
+| $a$ | Zahl der beschleunigten Runden |
+| $v_r$ | gedachte Zusatzpunkte der Gruppe $G_A$ vor Runde $r$ |
+| $R_A$, $R_B$ | Wertungszahlen zweier Spieler in der Simulation |
+| $E_A$ | erwarteter Punktanteil von $A$ gegen $B$ |
+
+[Schritt für Schritt erklärt, mit Herleitung und Literatur](https://sebastianhanisch.net/schweizer-system-erklaert.html#fachleute)
+        """
+    )
+    # erklaerseite:lesehilfe:end
     st.markdown(
         r"""
 **Modell.** Eine Runde wird **Bracket für Bracket** gelöst (Score absteigend, Art. 1.9.2) - keine
@@ -208,9 +236,10 @@ Prozedur (Art. 3+4): pro Bracket wird eine Menge $S_1$ (die ersten $N_1$ Spieler
 (die restlichen) paarungskandidaten gebildet, $S_1[i]$ gegen $S_2[i]$. Erfüllt dieser Kandidat nicht alle
 Kriterien, werden Umordnungen $\pi$ von $S_2$ (Transpositionen) und danach Tausche gleich großer Gruppen
 zwischen $S_1$ und $S_2$ durchprobiert. Statt nur den lokal besten Kandidaten je Bracket zu schätzen, liefert
-die Suche ALLE brauchbaren Kandidaten in Prioritätsreihenfolge (Art. 3.8.1) - die Rundenlösung probiert für
-jeden per echter Rekursion, ob sich die restliche Runde damit zu Ende lösen lässt (**echtes Backtracking**
-statt einer Schätzung), und geht erst bei Fehlschlag zum nächsten Kandidaten über. Jedes Kriterium
+die Suche die brauchbaren Kandidaten in Prioritätsreihenfolge (Art. 3.8.1). Welche Menge von Spielern aus einer
+Bracket herausfällt, entscheidet vorab eine Kette über alle Brackets ([C5]-[C9], dynamische Programmierung mit
+Matching-Test, `ss_chain.py`); die Kandidatenliste mit Farbbewertung wird nur noch einmal je Bracket entlang des
+gewählten Wegs gelesen. Jedes Kriterium
 $C_{10}, ..., C_{21}$ ist dabei eine eigenständige, kleine ganze Zahl - der Vergleich ist ein direkter
 lexikografischer Tupel-Vergleich, kein gemischt-radix-Kodiertrick nötig.
 
@@ -219,15 +248,24 @@ gewichtetes allgemeines Matching (wie [`weighted-blossom-demo`](https://github.c
 weil die Referenz-Engine bbpPairings das intern so tut - erreichte damals aber nur ~66 % Übereinstimmung, weil
 es eine grobe Annäherung an bbpPairings' Implementierungsstrategie war, nicht deren treue Nachbildung. Die
 direkte Umsetzung von Art. 3+4 (Transposition/Tausch statt globalem Matching) mit echtem Backtracking hob die
-Übereinstimmung auf ~99 %/97 % - der **Regeltext-Modus** hier, weiterhin Standard, weil jeder Schritt einzeln
-nachvollziehbar bleibt (der pädagogische Kern dieser Demo). Der verbliebene Rest sind teils
-Suchtiefen-Grenzen, teils Gleichstände, die bbpPairings über ein einziges, rundenweit fortgeführtes gewichtetes Matching-Objekt löst -
-kein im Regeltext stehender Mechanismus. Dieser wurde inzwischen VOLLSTÄNDIG (nicht nur als Tie-Break-Zusatz)
-nachgebaut und gegen die Referenz verifiziert: 100 % exakte Übereinstimmung in allen gemessenen Stichproben (kleine und größere Felder), als eigener **bbpPairings-treuer
-Modus** wählbar (⚙️ Einstellungen) - auf Kosten der Nachvollziehbarkeit einzelner Paarungsentscheidungen, s.
+Übereinstimmung auf ~99 %/97 %; weitere Korrekturen (Details im README) bringen den **Regeltext-Modus** hier auf allen
+gemessenen Stichproben auf 100 %. Er bleibt der Standard, weil jeder Schritt einzeln nachvollziehbar bleibt (der
+pädagogische Kern dieser Demo). Der **bbpPairings-treue Modus** (⚙️ Einstellungen) ist der vollständige Nachbau von
+bbpPairings' eigenem Mechanismus, ein einziges rundenweit fortgeführtes gewichtetes Matching-Objekt, ebenfalls mit
+100 % - auf Kosten der Nachvollziehbarkeit einzelner Paarungsentscheidungen, s.
 "Wie genau ist die Nachbildung wirklich?" oben.
 
 **Elo-Erwartungswert** (Simulation der Turnierverläufe): $E_A = 1/(1+10^{(R_B-R_A)/400})$.
+
+**Baku-Beschleunigung** (FIDE C.04.7). Bei $N$ Spielern und $R$ Runden bilden die ersten Spieler der Setzliste die Gruppe $G_A$, die obere Hälfte
+aufgerundet auf eine gerade Zahl:
+
+$$|G_A| = 2\left\lceil N/4 \right\rceil$$
+
+Beschleunigt werden die ersten $a = \lceil R/2 \rceil$ Runden. Vor der ersten Hälfte davon bekommt $G_A$ einen gedachten Punkt, vor den übrigen
+beschleunigten Runden einen halben, danach nichts; gepaart wird nach $s_i + v_r$ für $i \in G_A$:
+
+$$v_r = 1 \ (r \le \lceil a/2 \rceil), \quad v_r = 1/2 \ (\lceil a/2 \rceil < r \le a), \quad v_r = 0 \ (r > a), \qquad a = \lceil R/2 \rceil$$
 
 Regeltext-Modus implementiert in `ss_engine.py` (Runde vorbereiten, Farben), `ss_chain.py` (Kette der Downfloater-
 Mengen nach C5-C9), `ss_bracket.py` (Transposition/Tausch-Suche) und `ss_quality.py` (Kriterien C10-C21); bbpPairings-treuer Modus in `ss_matching_engine.py` (ein

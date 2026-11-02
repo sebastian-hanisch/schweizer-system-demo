@@ -2,8 +2,10 @@
 
 Eigenschaftstest: auf kleinen Zufallsständen werden ALLE gültigen vollständigen Runden (C1/C3 verträglich, ein
 Freilos nur bei ungerader Zahl und nur für Spieler ohne Freilos, C2) aufgezählt, und `solve_round` muss genau
-eine mit dem kleinsten (Freilos-Schlüssel, [C6]/[C7]-Profil) liefern. Das Profil wird hier unabhängig vom
-Modul aus den Paaren berechnet: je Score-Gruppe von oben nach unten (Zahl, Scores absteigend) der Spieler, die
+eine mit dem kleinsten (Freilos-Schlüssel, [C6]/[C7] des ersten Blocks, [C6]/[C7] des zweiten Blocks) liefern: der
+erste Block entscheidet nach [C6]/[C7], der zweite nur über [C8] (Art. 2.4.3: "in the following bracket", nicht
+tiefer - tiefere Blöcke dürfen die Farbe und die Floats des aktuellen Blocks nicht überstimmen). Das Profil wird
+hier unabhängig vom Modul aus den Paaren berechnet: je Score-Gruppe von oben nach unten (Zahl, Scores absteigend) der Spieler, die
 aus dieser Gruppe herausfallen, also ein Score >= der Gruppe haben und einen Partner unterhalb davon (das
 Freilos zählt als Partner unterhalb von allem)."""
 
@@ -71,7 +73,7 @@ def test_solve_round_picks_the_lexicographically_best_chain(n):
             round_no = rounds + 1
             threshold = topscorer_threshold_for_round(round_no, round_no)
             groups = _groups(players)
-            options = [(bye_key(players[bye]) if bye else (-1, -1), _profile(pairs, bye, players, groups), pairs, bye)
+            options = [(bye_key(players[bye]) if bye else (-1, -1), _profile(pairs, bye, players, groups)[:2], pairs, bye)
                        for pairs, bye in _all_rounds(players, threshold)]
             result = solve_round(groups, players, threshold)
             if not options:
@@ -80,7 +82,7 @@ def test_solve_round_picks_the_lexicographically_best_chain(n):
             assert result is not None, f"n={n} seed={seed} rounds={rounds}: es gibt Runden, solve_round fand keine"
             pairs, bye = result
             best = min((key, profile) for key, profile, _, _ in options)
-            got = (bye_key(players[bye]) if bye else (-1, -1), _profile(pairs, bye, players, groups))
+            got = (bye_key(players[bye]) if bye else (-1, -1), _profile(pairs, bye, players, groups)[:2])
             assert got == best, f"n={n} seed={seed} rounds={rounds}: {got} statt {best}"
             checked += 1
     assert checked >= 15

@@ -90,17 +90,22 @@ def _metric_values(at):
 
 def test_matching_engine_mode_renders_and_shows_different_metric():
     # Echter Rauchtest (nicht nur Render-Test): der bbpPairings-treue Modus muss OHNE Fehler laufen
-    # UND eine andere Übereinstimmungsrate zeigen als der Regeltext-Modus (sonst würde die
-    # Moduswahl gar nicht tatsächlich wirken - z. B. weil `_tournament`s Cache-Key den Modus nicht
-    # mit einschließt, echter Regressionsfall, den dieser Test abdecken soll).
+    # UND einen anderen Erklärtext zeigen als der Regeltext-Modus (beide Modi stimmen inzwischen auf allen Stichproben
+    # mit der Referenz überein, der Zahlenwert ist also gleich; sonst würde die Moduswahl gar nicht tatsächlich
+    # wirken - z. B. weil `_tournament`s Cache-Key den Modus nicht mit einschließt, echter Regressionsfall).
     at_ruleset = _run()
     ruleset_values = _metric_values(at_ruleset)
+    ruleset_text = " ".join(m.value for m in at_ruleset.markdown)
 
     def setup(at):
         at.session_state["engine_mode_radio"] = C.ENGINE_MODE_MATCHING
 
     at_matching = _run(setup)
     matching_values = _metric_values(at_matching)
+    matching_text = " ".join(m.value for m in at_matching.markdown)
 
     assert matching_values["Exakte Übereinstimmung (Qualitätskriterien)"] == "100 %"
-    assert matching_values["Exakte Übereinstimmung (Qualitätskriterien)"] != ruleset_values["Exakte Übereinstimmung (Qualitätskriterien)"]
+    assert ruleset_values["Exakte Übereinstimmung (Qualitätskriterien)"] == "100 %"
+    assert "bbpPairings' **eigenen internen Mechanismus**" in matching_text
+    assert "bbpPairings' **eigenen internen Mechanismus**" not in ruleset_text
+    assert "zwei Phasen gelöst" in ruleset_text and "zwei Phasen gelöst" not in matching_text

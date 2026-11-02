@@ -178,9 +178,14 @@ class _Chain:
                     rest = self.best(k + 1, chosen, True)
                     if rest is None:
                         continue
-                    if best_profile is None or rest[0] < best_profile:
-                        best_profile, winners = rest[0], [chosen]
-                    elif rest[0] == best_profile:
+                    # [C8] (Art. 2.4.3) verlangt es nur für den FOLGENDEN Block: verglichen wird der [C6]/[C7]-
+                    # Schlüssel des nächsten Blocks, nicht die ganze Restkette. Ein tieferer Block darf die Farb-
+                    # und Float-Kriterien dieses Blocks ([C10]ff) nicht überstimmen (gemessen: fünf Abweichungen
+                    # gegen bbpPairings, in denen ein besseres [C7] weit unten die Farbe hier verschlechterte).
+                    next_key = rest[0][:1]
+                    if best_profile is None or next_key < best_profile:
+                        best_profile, winners = next_key, [chosen]
+                    elif next_key == best_profile:
                         winners.append(chosen)
                 if best_profile is not None:
                     return (own_key,) + best_profile, winners
@@ -240,8 +245,7 @@ class _Chain:
         return best
 
     def _quality(self, pairs, downfloaters, mdps: frozenset[int]) -> tuple:
-        residents_out = [r for r in downfloaters if r not in mdps]
-        return _quality_tuple(list(pairs), residents_out, mdps, self.players, self.threshold)
+        return _quality_tuple(list(pairs), list(downfloaters), mdps, self.players, self.threshold)
 
     def _colour_terms(self, a: int, b: int) -> tuple[int, int, int, int] | None:
         """(C10-C13) des Paars, oder None, wenn es nicht erlaubt ist (C1/C3)."""
