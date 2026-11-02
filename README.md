@@ -24,10 +24,11 @@ Rundenturnier (Stück 1, gebaut+gepusht+deployed)
 | Wird Runde 1 (frisches Feld) korrekt nachgebildet? | ✅ **100 %** – die "obere Hälfte gegen untere Hälfte"-Standardaufteilung (Art. 3.3.1, wörtlich aus dem Regeltext) stimmt exakt mit bbpPairings überein (verifiziert für 4–10 Spieler). |
 | Stimmen die zwei mitgelieferten bbpPairings-Testfixturen exakt? | ✅ `dutch_2025_C5` und `dutch_2025_C9` (echte FIDE-Testfälle) werden Zahl für Zahl reproduziert. |
 | Wie genau sind die Qualitätskriterien (C6-C21) insgesamt? | ✅ **~99 %** exakte Übereinstimmung mit bbpPairings auf zufälligen Mehrrundenturnieren (4–16 Spieler, 1–4 Runden, 1427 Vergleiche zum Zeitpunkt der letzten Messung; die heutige Stichprobe erzeugt 1430 Fälle); auf einer bewusst härteren Stichprobe (6–19 Spieler, bis 6 Runden, mehr Nähe an [C1]-Erschöpfung) **~97 %**. Die restliche Lücke ist ein bekanntes, aus bbpPairings' eigenem Quellcode verstandenes Phänomen (echte Gleichstände, die ein iteratives Neu-Lösen bräuchten) - keine unerklärte Restlücke. |
-| Wie genau auf größeren Feldern (8–31 Spieler, 5–9 Runden)? | ✅ **99,3 %** im bbpPairings-treuen Modus (570 von 574 Runden), **94,1 %** im Regeltext-Modus (540 von 574), gemessen auf Runden, die bbpPairings selbst fortführt, damit beide Seiten denselben Stand sehen. Die kleineren Felder oben bleiben bei ihren Zahlen; diese Messung ist neu und die einzige mit größeren Feldern. |
+| Wie genau auf größeren Feldern (8–31 Spieler, 5–9 Runden)? | ✅ **100 %** im bbpPairings-treuen Modus (574 von 574 Runden, mit Beschleunigung 576 von 576, jeweils Paarung, Freilos und Farben), **94,4 %** im Regeltext-Modus (542 von 574), gemessen auf Runden, die bbpPairings selbst fortführt, damit beide Seiten denselben Stand sehen. Die kleineren Felder oben bleiben bei ihren Zahlen; diese Messung ist neu und die einzige mit größeren Feldern. |
 | Stimmt die Farbzuteilung (Art. 5.2) mit bbpPairings? | ✅ **Exakt**: 0 Abweichungen auf 5068 Paaren der Referenz. Davor 76 (1,5 %): Art. 5.2.3 war als „jeder wechselt zu seiner letzten Farbe“ umgesetzt statt als Vergleich der Historien (siehe unten). |
+| Stimmt die Spitzenreiter-Regel (Art. 1.8, C3-Ausnahme)? | ✅ **Seit der Korrektur ja.** Die Demo rechnete die Grenze als Hälfte der *Gesamt*-Runden und ließ die Ausnahme in jeder Runde zu. Richtig, und so rechnet bbpPairings (`dutch.cpp`, `compatible`): Hälfte der *bereits gespielten* Runden, und nur in der letzten Runde. Das war die Ursache der letzten 4 von 574 Abweichungen im bbpPairings-treuen Modus (99,3 % → 100 %); im Regeltext-Modus 94,1 % → 94,4 %. |
 | Bleibt der Farbausgleich fair? | ✅ Weiß/Schwarz-Differenz bleibt in jedem gemessenen Turnier bei höchstens 1 je Spieler. |
-| Kostet die Baku-Beschleunigung Genauigkeit? | ✅ **Nein**: auf 576 von bbpPairings fortgeführten Runden (8–31 Spieler, 5–9 Runden) stimmen Paarungen und Freilos im bbpPairings-treuen Modus zu 99,3 % überein (ohne Beschleunigung ebenfalls 99,3 %), im Regeltext-Modus zu 95,1 % (ohne 94,1 %). |
+| Kostet die Baku-Beschleunigung Genauigkeit? | ✅ **Nein**: auf 576 von bbpPairings fortgeführten Runden (8–31 Spieler, 5–9 Runden) stimmen Paarungen, Freilos und Farben im bbpPairings-treuen Modus zu 100 % überein (ohne Beschleunigung ebenfalls), im Regeltext-Modus zu 95,8 % (ohne 94,4 %). |
 
 ## Baku-Beschleunigung (FIDE C.04.7)
 
@@ -314,9 +315,9 @@ Die absoluten Kriterien (C1-C3) sind **konstruktiv garantiert**, nicht nur getes
 (C6-C21) stimmen in ~99,5 % der gemessenen Fälle (99,5 % auf der Standard-, 97,5 % auf einer bewusst härteren
 Stichprobe) exakt mit der offiziellen Referenz-Engine überein – die gemessene Quote steht so in App und Tests,
 nicht schöngerechnet. Die verbliebene Lücke ist kein unerklärter Rest: der größere Anteil war eine reine
-Suchbreiten-Grenze (siebte Runde, s. o. - behoben durch großzügigere Deckel), der kleine Rest ist ein aus
-bbpPairings' eigenem Quellcode verstandenes Phänomen (echte C6-C21-Gleichstände, die ihr eigenes iteratives
-Neu-Lösen bräuchten, um IMMER exakt zu treffen - ein voller Portierungsversuch brachte hier GEMESSEN keinen
+Suchbreiten-Grenze (siebte Runde, s. o. - behoben durch großzügigere Deckel), der Rest ist teils eine
+weitere Suchtiefen-Grenze, teils ein aus bbpPairings' eigenem Quellcode verstandenes Phänomen (C6-C21-Gleichstände,
+die ihr eigenes iteratives Neu-Lösen bräuchten, um IMMER exakt zu treffen - ein voller Portierungsversuch brachte hier GEMESSEN keinen
 zusätzlichen Gewinn, siehe oben) - offen benannt statt verschwiegen, mit einer messbar hilfreichen, aber
 bewusst als Heuristik (nicht als hergeleitete Regel) gekennzeichneten Teillösung.
 

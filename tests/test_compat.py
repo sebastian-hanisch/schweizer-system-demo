@@ -49,3 +49,19 @@ def test_c3_topscorer_threshold_is_half_of_maximum_possible_not_current_leader()
     assert compatible(leader_not_yet_topscorer, other, topscorer_threshold=3.0) is False
     clear_topscorer = _absolute_black(1, score=3.5)
     assert compatible(clear_topscorer, other, topscorer_threshold=3.0) is True
+
+
+# --- Spitzenreiter-Grenze (Art. 1.8) -----------------------------------------------------------
+
+
+def test_topscorer_threshold_is_half_of_the_rounds_played_and_only_in_the_final_round():
+    from ss_compat import topscorer_threshold_for_round
+
+    # Letzte Runde (5 von 5): vier Runden gespielt, Grenze 2,0 - nicht 5/2 = 2,5.
+    assert topscorer_threshold_for_round(5, 5) == 2.0
+    # Vor der letzten Runde gibt es noch keine Spitzenreiter (die C3-Ausnahme greift nie).
+    assert topscorer_threshold_for_round(4, 5) == float("inf")
+    assert topscorer_threshold_for_round(1, 5) == float("inf")
+    # Ohne bekannte Gesamtrundenzahl gilt jede Runde als letzte.
+    assert topscorer_threshold_for_round(3, None) == 1.0
+    assert topscorer_threshold_for_round(1, None) == 0.0

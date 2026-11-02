@@ -43,7 +43,7 @@ from dataclasses import dataclass, field
 import networkx as nx
 
 from ss_colour import ABSOLUTE, STRONG, allocate, classify
-from ss_compat import compatible
+from ss_compat import compatible, topscorer_threshold_for_round
 from ss_model import BLACK, BYE, DOWN, UP, WHITE, Pairing, Player, RoundResult
 
 __all__ = ["pair_round_matching", "NoValidPairingError"]
@@ -717,8 +717,7 @@ class _Engine:
 def pair_round_matching(players: dict[int, Player], round_no: int, total_rounds: int | None = None) -> RoundResult:
     """Eigenständiger Einstiegspunkt, Rückgabeformat wie `ss_engine.pair_round` (`RoundResult`) für
     direkte Vergleichbarkeit - siehe Moduldoku: bewusst NICHT `ss_engine.pair_round` ersetzend."""
-    max_possible_score = float(total_rounds) if total_rounds is not None else float(max(round_no - 1, 0))
-    topscorer_threshold = max_possible_score / 2.0
+    topscorer_threshold = topscorer_threshold_for_round(round_no, total_rounds)
     played_rounds = max(round_no - 1, 0)
 
     engine = _Engine(players, topscorer_threshold, played_rounds)

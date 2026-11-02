@@ -7,8 +7,28 @@ schlicht False zurück, kein "Strafgewicht").
 
 from __future__ import annotations
 
+import math
+
 from ss_colour import ABSOLUTE, classify
 from ss_model import Player
+
+
+def topscorer_threshold_for_round(round_no: int, total_rounds: int | None) -> float:
+    """Score, den ein Spieler ÜBERSCHREITEN muss, um in dieser Runde Spitzenreiter zu sein (Art. 1.8).
+
+    Art. 1.8 definiert Spitzenreiter als "over 50 % of the maximum possible score when pairing the
+    FINAL round": zu diesem Zeitpunkt sind erst R-1 Runden gespielt, die Grenze ist also (R-1)/2, nicht
+    R/2 - und vor der letzten Runde gibt es noch keine Spitzenreiter. So rechnet auch bbpPairings
+    (`dutch.cpp`, `compatible`: Grenze = gespielte Runden * Siegpunkte / 2, die C3-Ausnahme nur bei
+    `playedRounds >= expectedRounds - 1`). Frühere Fassung rechnete R/2 und ließ die Ausnahme in jeder
+    Runde zu: gegen die Referenz fielen so Paare auseinander, die in der letzten Runde zwei absolut
+    gleichfarbige Spieler zusammenführen dürfen (Spitzenreiter-Ausnahme), und umgekehrt.
+
+    Ohne `total_rounds` (Gesamtrundenzahl unbekannt) gilt jede Runde als letzte, die Grenze ist dann die
+    Hälfte der bisher gespielten Runden."""
+    if total_rounds is not None and round_no < total_rounds:
+        return math.inf
+    return max(round_no - 1, 0) / 2.0
 
 
 def compatible(a: Player, b: Player, topscorer_threshold: float) -> bool:

@@ -22,7 +22,7 @@ from __future__ import annotations
 from ss_blossom import maximum_cardinality_matching
 from ss_bracket import BracketContext, NoValidPairingError, solve_bracket
 from ss_colour import allocate
-from ss_compat import compatible
+from ss_compat import compatible, topscorer_threshold_for_round
 from ss_model import BYE, DOWN, GameRecord, Pairing, Player, RoundResult, UP
 
 __all__ = ["pair_round", "apply_round", "NoValidPairingError"]
@@ -255,8 +255,7 @@ def pair_round(
     Gesamtrundenzahl selbst nicht bekannt ist. Wirft `NoValidPairingError` (Art. 1.9.3), wenn keine
     C1-C4-konforme Paarung existiert - ein echter, in der FIDE-Praxis vorkommender Turnierleiter-Fall."""
     active_players = {r: p for r, p in players.items() if r not in absent}
-    max_possible_score = float(total_rounds) if total_rounds is not None else float(max(round_no - 1, 0))
-    topscorer_threshold = max_possible_score / 2.0
+    topscorer_threshold = topscorer_threshold_for_round(round_no, total_rounds)
     groups = _scoregroups(active_players)
 
     result = _solve_round_both_passes(groups, active_players, topscorer_threshold, frozenset())

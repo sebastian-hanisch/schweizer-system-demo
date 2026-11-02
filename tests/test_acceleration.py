@@ -171,7 +171,7 @@ def test_oracle_really_reacts_to_the_acceleration_lines():
     assert {frozenset(p) for p in fast} == {frozenset(p) for p in [(1, 3), (2, 4), (5, 7), (6, 8)]}
 
 
-def _agreement(mode, sizes, round_counts, seeds):
+def _agreement(mode, sizes, round_counts, seeds, accelerate=True):
     """Anteil der Runden, in denen Paarungen UND Freilos mit bbpPairings übereinstimmen. Das Turnier
     wird von der Referenz selbst fortgeführt, damit beide Seiten denselben Stand sehen (sonst
     verzerren frühere Abweichungen alle Folgerunden)."""
@@ -185,7 +185,7 @@ def _agreement(mode, sizes, round_counts, seeds):
             for seed in seeds:
                 rng = random.Random(seed * 1000 + n * 10 + rounds)
                 players = {r: Player(rank=r) for r in range(1, n + 1)}
-                accs = acc.accelerations_by_rank(n, rounds)
+                accs = acc.accelerations_by_rank(n, rounds) if accelerate else None
                 for rnd in range(1, rounds + 1):
                     try:
                         theirs, bye = run_bbppairings(
@@ -193,7 +193,7 @@ def _agreement(mode, sizes, round_counts, seeds):
                         )
                     except RuntimeError:
                         break  # kleines Feld erschöpft: auch die Referenz findet keine Paarung mehr
-                    view = acc.with_pairing_scores(players, acc.virtual_points_by_rank(n, rounds, rnd))
+                    view = acc.with_pairing_scores(players, acc.virtual_points_by_rank(n, rounds, rnd) if accelerate else {})
                     try:
                         mine = fn(view, rnd, total_rounds=rounds)
                         ok = {frozenset((p.white, p.black)) for p in mine.pairings} == {frozenset(p) for p in theirs}
@@ -218,18 +218,30 @@ def _agreement(mode, sizes, round_counts, seeds):
 
 
 @needs_oracle
-def test_matching_mode_agrees_with_bbppairings_on_accelerated_tournaments():
-    # Gemessen 99,3 % (572 von 576 Runden; 8-31 Spieler, 5-9 Runden) - genau so wie ohne Beschleunigung
-    # (99,3 %). Schwelle mit Abstand nach unten, damit nur ein echter Rückschritt auffällt.
+def test_matching_mode_agrees_exactly_with_bbppairings_on_accelerated_tournaments():
+    # Gemessen 100 % (576 von 576 Runden; 8-31 Spieler, 5-9 Runden), Paarung, Freilos UND Farben. Diese
+    # Stichprobe ist eine Teilmenge davon (gleiche Saatwerte), darum ist die Prüfung exakt.
     rate, total, wrong_colours = _agreement(MATCHING, sizes=(8, 11, 14, 17), round_counts=(5, 9), seeds=range(2))
     assert total >= 60
-    assert rate >= 0.95, f"{rate:.1%} von {total}"
-    assert wrong_colours == 0  # gleiche Paarung heißt gleiche Farben, gemessen auf allen 576 Runden
+    assert rate == 1.0, f"{rate:.1%} von {total}"
+    assert wrong_colours == 0
+
+
+@needs_oracle
+def test_matching_mode_agrees_exactly_without_acceleration_on_larger_fields():
+    # Regression der Spitzenreiter-Regel (ss_compat.topscorer_threshold_for_round): mit Grenze R/2 und
+    # der C3-Ausnahme in jeder Runde stimmten hier 4 von 574 Runden nicht (99,3 %), jetzt alle.
+    rate, total, wrong_colours = _agreement(
+        MATCHING, sizes=(8, 11, 14, 17), round_counts=(5, 7, 9), seeds=range(4), accelerate=False
+    )
+    assert total >= 100
+    assert rate == 1.0, f"{rate:.1%} von {total}"
+    assert wrong_colours == 0
 
 
 @needs_oracle
 def test_ruleset_mode_agrees_with_bbppairings_on_accelerated_tournaments():
-    # Gemessen 95,1 % (548 von 576) - ohne Beschleunigung 94,1 %: die Beschleunigung kostet nichts.
+    # Gemessen 95,8 % (552 von 576) - ohne Beschleunigung 94,4 %: die Beschleunigung kostet nichts.
     rate, total, wrong_colours = _agreement(RULESET, sizes=(8, 11, 14), round_counts=(5, 9), seeds=range(2))
     assert total >= 40
     assert rate >= 0.85, f"{rate:.1%} von {total}"
