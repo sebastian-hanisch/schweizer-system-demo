@@ -24,6 +24,8 @@ Rundenturnier (Stück 1, gebaut+gepusht+deployed)
 | Wird Runde 1 (frisches Feld) korrekt nachgebildet? | ✅ **100 %** – die "obere Hälfte gegen untere Hälfte"-Standardaufteilung (Art. 3.3.1, wörtlich aus dem Regeltext) stimmt exakt mit bbpPairings überein (verifiziert für 4–10 Spieler). |
 | Stimmen die zwei mitgelieferten bbpPairings-Testfixturen exakt? | ✅ `dutch_2025_C5` und `dutch_2025_C9` (echte FIDE-Testfälle) werden Zahl für Zahl reproduziert. |
 | Wie genau sind die Qualitätskriterien (C6-C21) insgesamt? | ✅ **~99 %** exakte Übereinstimmung mit bbpPairings auf zufälligen Mehrrundenturnieren (4–16 Spieler, 1–4 Runden, 1427 Vergleiche zum Zeitpunkt der letzten Messung; die heutige Stichprobe erzeugt 1430 Fälle); auf einer bewusst härteren Stichprobe (6–19 Spieler, bis 6 Runden, mehr Nähe an [C1]-Erschöpfung) **~97 %**. Die restliche Lücke ist ein bekanntes, aus bbpPairings' eigenem Quellcode verstandenes Phänomen (echte Gleichstände, die ein iteratives Neu-Lösen bräuchten) - keine unerklärte Restlücke. |
+| Wie genau auf größeren Feldern (8–31 Spieler, 5–9 Runden)? | ✅ **99,3 %** im bbpPairings-treuen Modus (570 von 574 Runden), **94,1 %** im Regeltext-Modus (540 von 574), gemessen auf Runden, die bbpPairings selbst fortführt, damit beide Seiten denselben Stand sehen. Die kleineren Felder oben bleiben bei ihren Zahlen; diese Messung ist neu und die einzige mit größeren Feldern. |
+| Stimmt die Farbzuteilung (Art. 5.2) mit bbpPairings? | ✅ **Exakt**: 0 Abweichungen auf 5068 Paaren der Referenz. Davor 76 (1,5 %): Art. 5.2.3 war als „jeder wechselt zu seiner letzten Farbe“ umgesetzt statt als Vergleich der Historien (siehe unten). |
 | Bleibt der Farbausgleich fair? | ✅ Weiß/Schwarz-Differenz bleibt in jedem gemessenen Turnier bei höchstens 1 je Spieler. |
 | Kostet die Baku-Beschleunigung Genauigkeit? | ✅ **Nein**: auf 576 von bbpPairings fortgeführten Runden (8–31 Spieler, 5–9 Runden) stimmen Paarungen und Freilos im bbpPairings-treuen Modus zu 99,3 % überein (ohne Beschleunigung ebenfalls 99,3 %), im Regeltext-Modus zu 95,1 % (ohne 94,1 %). |
 
@@ -42,10 +44,16 @@ echten Punkten.
   zwei Beispiele aus Art. 1.4.4, die Gruppengröße 82 bei 161 Teilnehmern, eine von Hand berechnete Runde 1, die
   Eigenschaft „Runde 1 mischt GA und GB nie“ und der Abgleich mit bbpPairings (`tests/test_acceleration.py`).
 - **Nicht abgebildet**: Nachmeldungen (Art. 1.3), die Demo hat ein festes Feld.
-- **Offener Befund, nicht von der Beschleunigung**: Beim Vergleich der Farben Paar für Paar (nicht nur der
-  Paarungen) wichen in dieser Messreihe rund 11–15 % der Runden ab, mit und ohne Beschleunigung gleich. Die
-  bestehenden Tests vergleichen Paarungen ohne Farbe, deshalb war das bisher unsichtbar. Es ist noch nicht
-  untersucht.
+- **Beim Messen gefundener Farbfehler (behoben, nicht von der Beschleunigung)**: Verglich man die Farben Paar
+  für Paar, wichen 76 von 5068 Paaren ab, mit und ohne Beschleunigung gleich (je Runde mit etwa 15 Paaren
+  ergibt das 11–15 % der Runden). Die bestehenden Tests verglichen Paarungen ohne Farbe, deshalb war das
+  unsichtbar. Ursache in `ss_colour.py`: Art. 5.2.3 („alternieren zu der jüngsten Gelegenheit, bei der ein
+  Spieler Weiß und der andere Schwarz hatte“) war als „jeder wechselt zu seiner eigenen letzten Farbe“
+  umgesetzt. Richtig ist ein Vergleich der beiden Historien, und zwar wie in bbpPairings (`common.cpp`,
+  `findFirstColorDifference`) über die k-te jüngste *gespielte* Partie jedes Spielers, Freilose übersprungen,
+  nicht über gleiche Rundennummern. Nach der Korrektur: 0 Abweichungen auf denselben 5068 Paaren, und in
+  allen vier gemessenen Konfigurationen (beide Engines, mit und ohne Beschleunigung) stimmen die Farben in
+  jeder Runde mit übereinstimmender Paarung (`tests/test_colour.py`).
 
 ## Architektur (drei bewusste Kehrtwenden während des Baus)
 

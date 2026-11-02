@@ -179,6 +179,7 @@ def _agreement(mode, sizes, round_counts, seeds):
 
     fn = ENGINES[mode]
     total = same = 0
+    wrong_colours = 0  # Runden mit gleicher Paarung, aber anderer Farbverteilung als die Referenz
     for n in sizes:
         for rounds in round_counts:
             for seed in seeds:
@@ -197,6 +198,8 @@ def _agreement(mode, sizes, round_counts, seeds):
                         mine = fn(view, rnd, total_rounds=rounds)
                         ok = {frozenset((p.white, p.black)) for p in mine.pairings} == {frozenset(p) for p in theirs}
                         ok = ok and mine.bye == bye
+                        if ok and {(p.white, p.black) for p in mine.pairings} != {tuple(p) for p in theirs}:
+                            wrong_colours += 1
                     except (ss_engine.NoValidPairingError, ss_matching_engine.NoValidPairingError):
                         ok = False
                     total += 1
@@ -211,21 +214,23 @@ def _agreement(mode, sizes, round_counts, seeds):
                     result = RoundResult(rnd, tuple(Pairing(w, b) for w, b in theirs), bye, floats)
                     outcomes = {w: rng.choice((True, False, None)) for w, _ in theirs}
                     players = ss_engine.apply_round(players, result, outcomes)
-    return same / total, total
+    return same / total, total, wrong_colours
 
 
 @needs_oracle
 def test_matching_mode_agrees_with_bbppairings_on_accelerated_tournaments():
     # Gemessen 99,3 % (572 von 576 Runden; 8-31 Spieler, 5-9 Runden) - genau so wie ohne Beschleunigung
     # (99,3 %). Schwelle mit Abstand nach unten, damit nur ein echter Rückschritt auffällt.
-    rate, total = _agreement(MATCHING, sizes=(8, 11, 14, 17), round_counts=(5, 9), seeds=range(2))
+    rate, total, wrong_colours = _agreement(MATCHING, sizes=(8, 11, 14, 17), round_counts=(5, 9), seeds=range(2))
     assert total >= 60
     assert rate >= 0.95, f"{rate:.1%} von {total}"
+    assert wrong_colours == 0  # gleiche Paarung heißt gleiche Farben, gemessen auf allen 576 Runden
 
 
 @needs_oracle
 def test_ruleset_mode_agrees_with_bbppairings_on_accelerated_tournaments():
     # Gemessen 95,1 % (548 von 576) - ohne Beschleunigung 94,1 %: die Beschleunigung kostet nichts.
-    rate, total = _agreement(RULESET, sizes=(8, 11, 14), round_counts=(5, 9), seeds=range(2))
+    rate, total, wrong_colours = _agreement(RULESET, sizes=(8, 11, 14), round_counts=(5, 9), seeds=range(2))
     assert total >= 40
     assert rate >= 0.85, f"{rate:.1%} von {total}"
+    assert wrong_colours == 0

@@ -15,18 +15,18 @@ ENGINE_MODE_MATCHING = "matching"
 ENGINE_MODE_DEFAULT = ENGINE_MODE_RULESET
 ENGINE_MODE_LABELS = {
     ENGINE_MODE_RULESET: "📜 Regeltext-Modus (Art. 3+4, Schritt für Schritt erklärbar)",
-    ENGINE_MODE_MATCHING: "🎯 bbpPairings-treuer Modus (exaktes Matching, 100 % Übereinstimmung)",
+    ENGINE_MODE_MATCHING: "🎯 bbpPairings-treuer Modus (exaktes Matching, 99-100 % Übereinstimmung)",
 }
 ENGINE_MODE_HELP = {
     ENGINE_MODE_RULESET: (
         "Bracket-für-Bracket, wörtliche Transposition/Tausch-Suche nach FIDE Art. 3+4 - jeder Schritt "
-        "einzeln nachvollziehbar. Gemessen ca. 99 %/97 % exakte Übereinstimmung mit bbpPairings; der "
+        "einzeln nachvollziehbar. Gemessen ca. 99 %/97 % exakte Übereinstimmung mit bbpPairings (auf größeren Feldern 94 %); der "
         "kleine Rest sind echte Gleichstände, die die Referenz über einen eigenen, nicht im Regeltext "
         "stehenden internen Mechanismus auflöst (siehe unten)."
     ),
     ENGINE_MODE_MATCHING: (
         "Bildet bbpPairings' EIGENEN Algorithmus nach: EIN einziges, rundenweit fortgeführtes gewichtetes "
-        "Matching-Objekt statt einer Bracket-für-Bracket-Suche. Gemessen 100 % exakte Übereinstimmung - "
+        "Matching-Objekt statt einer Bracket-für-Bracket-Suche. Gemessen 100 % exakte Übereinstimmung auf kleinen, 99,3 % auf größeren Feldern - "
         "aber die einzelne Paarungsentscheidung ist NICHT mehr in nachvollziehbare Einzelschritte "
         "zerlegbar, sondern das Ergebnis eines globalen Optimierungslaufs."
     ),

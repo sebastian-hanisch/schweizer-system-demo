@@ -166,7 +166,7 @@ auf tausenden zufälligen Testrunden geprüft - die beiden Modi liegen hier bewu
 )
 mc1, mc2 = st.columns(2)
 if engine_mode == C.ENGINE_MODE_RULESET:
-    mc1.metric("Exakte Übereinstimmung (Qualitätskriterien)", "~99 %", help="Gemessen an zufälligen Mehrrundenturnieren, 4-16 Spieler, 1-4 Runden (zuletzt gemessen: 1420 von 1427 Vergleichen übereinstimmend; die heutige Stichprobe erzeugt 1430 Fälle) - auf einer bewusst härteren Stichprobe (6-19 Spieler, bis 6 Runden) ~97 %. Siehe README für die vollständige Methodik.")
+    mc1.metric("Exakte Übereinstimmung (Qualitätskriterien)", "~99 %", help="Gemessen an zufälligen Mehrrundenturnieren, 4-16 Spieler, 1-4 Runden (zuletzt gemessen: 1420 von 1427 Vergleichen übereinstimmend; die heutige Stichprobe erzeugt 1430 Fälle) - auf einer bewusst härteren Stichprobe (6-19 Spieler, bis 6 Runden) ~97 %. Auf größeren Feldern (8-31 Spieler, 5-9 Runden; 574 von bbpPairings fortgeführte Runden) 94,1 % bei Paarung und Freilos; die Farben stimmen bei übereinstimmender Paarung in jeder Runde. Siehe README für die vollständige Methodik.")
     mc2.metric("Übereinstimmung bei Runde 1 (frisches Feld)", "100 %", help="Die 'obere Hälfte gegen untere Hälfte'-Standardaufteilung wird exakt nachgebildet.")
     st.markdown(
         """
@@ -183,18 +183,18 @@ GEMESSEN keinen Gewinn - erst der **vollständige** Nachbau (⚙️ Einstellunge
 schließt die Lücke, dafür ohne die Schritt-für-Schritt-Nachvollziehbarkeit dieses Modus hier."""
     )
 else:
-    mc1.metric("Exakte Übereinstimmung (Qualitätskriterien)", "100 %", help="Gemessen an zufälligen Mehrrundenturnieren, 4-16 Spieler, 1-4 Runden (1430 Vergleiche) UND einer bewusst härteren Stichprobe (6-19 Spieler, bis 6 Runden, 1994 Vergleiche) - beide exakt 100 %. Siehe README für die vollständige Methodik.")
-    mc2.metric("Übereinstimmung bei Runde 1 (frisches Feld)", "100 %", help="Wie bei jeder Runde in diesem Modus: exakt.")
+    mc1.metric("Exakte Übereinstimmung (Qualitätskriterien)", "99-100 %", help="Gemessen an zufälligen Mehrrundenturnieren, 4-16 Spieler, 1-4 Runden (1430 Vergleiche) UND einer bewusst härteren Stichprobe (6-19 Spieler, bis 6 Runden, 1994 Vergleiche) - beide exakt 100 %. Auf größeren Feldern (8-31 Spieler, 5-9 Runden; 574 von bbpPairings fortgeführte Runden) 99,3 % bei Paarung und Freilos (570 von 574); die Farben stimmen bei übereinstimmender Paarung in jeder Runde. Siehe README für die vollständige Methodik.")
+    mc2.metric("Übereinstimmung bei Runde 1 (frisches Feld)", "100 %", help="Die 'obere Hälfte gegen untere Hälfte'-Standardaufteilung wird in diesem Modus für jede getestete Feldgröße exakt nachgebildet (ab Runde 2 siehe links).")
     st.markdown(
         """
 Dieser Modus bildet nicht den FIDE-Regeltext nach, sondern bbpPairings' **eigenen internen Mechanismus**:
 EIN einziges gewichtetes Matching-Objekt wird für die GESAMTE Runde (alle Spieler, nicht nur eine Bracket)
 einmal angelegt und dann bracket-für-bracket mit inkrementell angepassten Kantengewichten weitergelöst -
 direkt aus dem geklonten `bbpPairings`-Quellcode portiert (`computeEdgeWeight`, `dutch.cpp`) und gegen die
-Referenz-Engine verifiziert. Der Preis für die 100-%-Exaktheit: die einzelne Paarungsentscheidung ("warum
+Referenz-Engine verifiziert. Der Preis für die (nahezu) exakte Übereinstimmung: die einzelne Paarungsentscheidung ("warum
 spielt X gegen Y") ist hier NICHT mehr in einzelne, für sich nachvollziehbare Regelschritte zerlegbar wie im
 Regeltext-Modus, sondern das Ergebnis eines globalen Optimierungslaufs - ein bewusster Erklärbarkeit-gegen-
-Exaktheit-Trade-off, kein "besser" oder "schlechter" an sich."""
+Genauigkeits-Trade-off, kein "besser" oder "schlechter" an sich."""
     )
 
 st.markdown("---")
@@ -223,7 +223,7 @@ direkte Umsetzung von Art. 3+4 (Transposition/Tausch statt globalem Matching) mi
 nachvollziehbar bleibt (der pädagogische Kern dieser Demo). Der verbliebene kleine Rest sind echte
 Gleichstände, die bbpPairings über ein einziges, rundenweit fortgeführtes gewichtetes Matching-Objekt löst -
 kein im Regeltext stehender Mechanismus. Dieser wurde inzwischen VOLLSTÄNDIG (nicht nur als Tie-Break-Zusatz)
-nachgebaut und gegen die Referenz verifiziert: 100 % exakte Übereinstimmung, als eigener **bbpPairings-treuer
+nachgebaut und gegen die Referenz verifiziert: 99-100 % exakte Übereinstimmung (100 % auf kleinen, 99,3 % auf größeren Feldern), als eigener **bbpPairings-treuer
 Modus** wählbar (⚙️ Einstellungen) - auf Kosten der Nachvollziehbarkeit einzelner Paarungsentscheidungen, s.
 "Wie genau ist die Nachbildung wirklich?" oben.
 

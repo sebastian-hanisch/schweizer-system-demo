@@ -116,6 +116,42 @@ def test_allocate_same_unresolved_strong_preference_grants_to_higher_rank():
     assert pairing.white == lower.rank
 
 
+def test_allocate_alternates_to_the_most_recent_game_in_which_the_colours_differed():
+    # Regressionstest (echter, gegen bbpPairings gefundener Fehler, ~1,5 % aller Paare): Art. 5.2.3 heißt
+    # "Alternate the colours to the most recent time in which one player had White and the other Black",
+    # nicht "jeder wechselt zu seiner eigenen letzten Farbe". Beide haben hier nach 4 Runden Differenz 0 und
+    # zuletzt Weiß (also mild Schwarz); die jüngste Gegenüberstellung mit verschiedenen Farben ist Runde 2
+    # (Spieler 1: Schwarz, Spieler 4: Weiß) - also bekommt jetzt Spieler 1 Weiß. Die alte Fassung ließ
+    # 5.2.3 hier ins Leere laufen und gab dem Höherrangigen (1) Schwarz.
+    one = _p(1, [(11, "w"), (12, "b"), (13, "b"), (14, "w")])
+    four = _p(4, [(21, "b"), (22, "w"), (23, "b"), (24, "w")])
+    assert classify(one).strength == MILD and classify(four).strength == MILD
+    pairing = allocate(one, four)
+    assert (pairing.white, pairing.black) == (1, 4)
+    swapped = allocate(four, one)
+    assert (swapped.white, swapped.black) == (1, 4)
+
+
+def test_allocate_alternation_compares_played_games_not_round_numbers():
+    # bbpPairings' `findFirstColorDifference` (common.cpp) stellt in JEDER Historie die k-te jüngste
+    # GESPIELTE Partie gegenüber, Freilose übersprungen - nicht Runde gegen Runde. Spieler 11 hatte ein
+    # Freilos in Runde 1, Spieler 7 in Runde 3; beide haben gespielt w, b, w (nur anders verteilt) und
+    # beide wollen STARK Schwarz. Nach gespielten Partien gibt es nie einen Unterschied, also entscheidet
+    # 5.2.4: Spieler 7 (Score 2,0) ist höherrangig als 11 (1,5) und bekommt Schwarz. Nach Rundennummern
+    # läge der Unterschied in Runde 2 (11: Weiß, 7: Schwarz) und 11 bekäme fälschlich Schwarz.
+    eleven = Player(rank=11, score=1.5, games=tuple(
+        GameRecord(i + 1, opp, col, 0.5, counted_as_bye=col is None)
+        for i, (opp, col) in enumerate([(0, None), (30, "w"), (31, "b"), (32, "w")])
+    ))
+    seven = Player(rank=7, score=2.0, games=tuple(
+        GameRecord(i + 1, opp, col, 0.5, counted_as_bye=col is None)
+        for i, (opp, col) in enumerate([(33, "w"), (34, "b"), (0, None), (35, "w")])
+    ))
+    assert classify(eleven).strength == STRONG and classify(seven).strength == STRONG
+    pairing = allocate(eleven, seven)
+    assert (pairing.white, pairing.black) == (11, 7)
+
+
 def test_allocate_same_unresolved_preference_grants_to_higher_score_not_just_higher_rank():
     # Regressionstest (echter, gegen bbpPairings.exe gefundener Bug, project_turnierplanung_dag_
     # scoping.md 2026-09-29): "höherrangig" in Art. 5.2.4 bedeutet Art.-1.2-Reihenfolge (Score
@@ -134,3 +170,44 @@ def test_allocate_same_unresolved_preference_grants_to_higher_score_not_just_hig
     pairing = allocate(better_rank_worse_score, worse_rank_better_score)
     assert pairing.black == worse_rank_better_score.rank
     assert pairing.white == better_rank_worse_score.rank
+
+
+# --- Abgleich der Farben mit bbpPairings ------------------------------------------------------
+
+import os
+import random
+
+import pytest
+
+import ss_engine
+from ss_model import Pairing, RoundResult
+from ss_oracle_bbppairings import run_bbppairings
+
+EXE_PATH = os.environ.get("BBPPAIRINGS_EXE")
+
+
+@pytest.mark.skipif(not EXE_PATH, reason="BBPPAIRINGS_EXE nicht gesetzt - Oracle-Tests übersprungen")
+def test_colour_allocation_equals_bbppairings_on_its_own_pairings():
+    """Die Farbzuteilung ist von der Paarungssuche getrennt (`allocate` bekommt ein fertiges Paar). Deshalb
+    wird hier auf den Paarungen der Referenz selbst verglichen: so zählt jede Abweichung als Farbfehler und
+    nicht als Folge einer anderen Paarung. Exakt, ohne Toleranz - gemessen 0 Abweichungen auf 5068 Paaren
+    (8-31 Spieler, 5-9 Runden); davor, mit der alten Fassung von Art. 5.2.3, 76 (1,5 %)."""
+    pairs_checked = 0
+    for n in (8, 11, 14, 17):
+        for rounds in (5, 9):
+            for seed in range(3):
+                rng = random.Random(seed * 1000 + n * 10 + rounds)
+                players = {r: Player(rank=r) for r in range(1, n + 1)}
+                for rnd in range(1, rounds + 1):
+                    try:
+                        theirs, bye = run_bbppairings(players, rnd, exe_path=EXE_PATH, total_rounds=rounds)
+                    except RuntimeError:
+                        break  # kleines Feld erschöpft - auch die Referenz findet keine Paarung mehr
+                    for white, black in theirs:
+                        mine = allocate(players[white], players[black])
+                        assert (mine.white, mine.black) == (white, black), f"n={n} R={rounds} s={seed} rnd={rnd}"
+                        pairs_checked += 1
+                    result = RoundResult(rnd, tuple(Pairing(w, b) for w, b in theirs), bye, {})
+                    outcomes = {w: rng.choice((True, False, None)) for w, _ in theirs}
+                    players = ss_engine.apply_round(players, result, outcomes)
+    assert pairs_checked > 500

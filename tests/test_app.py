@@ -102,5 +102,5 @@ def test_matching_engine_mode_renders_and_shows_different_metric():
     at_matching = _run(setup)
     matching_values = _metric_values(at_matching)
 
-    assert matching_values["Exakte Übereinstimmung (Qualitätskriterien)"] == "100 %"
+    assert matching_values["Exakte Übereinstimmung (Qualitätskriterien)"] == "99-100 %"
     assert matching_values["Exakte Übereinstimmung (Qualitätskriterien)"] != ruleset_values["Exakte Übereinstimmung (Qualitätskriterien)"]
