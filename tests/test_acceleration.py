@@ -241,7 +241,7 @@ def test_matching_mode_agrees_exactly_without_acceleration_on_larger_fields():
 
 @needs_oracle
 def test_ruleset_mode_agrees_with_bbppairings_on_accelerated_tournaments():
-    # Gemessen 97,6 % (562 von 576) - ohne Beschleunigung 97,7 %: die Beschleunigung kostet höchstens eine Runde.
+    # Gemessen 97,9 % (564 von 576) - ohne Beschleunigung 98,6 %: die Beschleunigung kostet höchstens ein paar Runden.
     # Diese Teilmenge: 100 % (79 von 79); Schwelle mit Abstand nach unten.
     rate, total, wrong_colours = _agreement(RULESET, sizes=(8, 11, 14), round_counts=(5, 9), seeds=range(2))
     assert total >= 40
@@ -253,10 +253,52 @@ def test_ruleset_mode_agrees_with_bbppairings_on_accelerated_tournaments():
 def test_ruleset_mode_agrees_with_bbppairings_on_larger_fields_without_acceleration():
     # Regression der Bracket-Suche (ss_bracket: perfekter bzw. bester Kandidat auch jenseits der ersten 300 gültigen
     # Anordnungen; Obergrenze zählt nur Kandidaten der besten Stufe). Vorher 94,4 % auf der vollen Messreihe, jetzt
-    # 97,7 %; diese Teilmenge 96,6 % (317 von 328), alle Farben gleich.
+    # 98,6 %; diese Teilmenge 96,6 % (317 von 328), alle Farben gleich.
     rate, total, wrong_colours = _agreement(
         RULESET, sizes=(8, 11, 14, 17), round_counts=(5, 7, 9), seeds=range(4), accelerate=False
     )
     assert total >= 100
     assert rate >= 0.93, f"{rate:.1%} von {total}"
     assert wrong_colours == 0
+
+
+def _oracle_led_state(n, rounds, seed, played):
+    """Stand nach `played` Runden eines Turniers, das bbpPairings selbst fortführt (dieselben Zufallszahlen wie in
+    der Messreihe, die diese Fälle gefunden hat: je Partie 42 % Weiß, 42 % Schwarz, 16 % Remis)."""
+    from ss_model import DOWN, UP, Pairing, RoundResult
+
+    rng = random.Random(seed * 1000 + n * 10 + rounds)
+    players = {r: Player(rank=r) for r in range(1, n + 1)}
+    for rnd in range(1, played + 1):
+        theirs, bye = run_bbppairings(players, rnd, exe_path=EXE_PATH, total_rounds=rounds)
+        floats = {}
+        for w, b in theirs:
+            if players[w].score != players[b].score:
+                high, low = (w, b) if players[w].score > players[b].score else (b, w)
+                floats[high], floats[low] = DOWN, UP
+        if bye is not None:
+            floats[bye] = DOWN
+        outcomes = {}
+        for w, _ in theirs:
+            x = rng.random()
+            outcomes[w] = True if x < 0.42 else (False if x < 0.84 else None)
+        players = ss_engine.apply_round(players, RoundResult(rnd, tuple(Pairing(w, b) for w, b in theirs), bye, floats), outcomes)
+    return players
+
+
+@needs_oracle
+@pytest.mark.parametrize(
+    "n, rounds, seed, round_no",
+    [
+        (14, 9, 2, 3),  # Strom der Bracket-Suche ließ die farblich perfekte Paarung aus; Erzeugungsreihenfolge bei Gleichstand
+        (11, 9, 2, 6),  # [C8]: gleich gute Downfloater-Mengen, der Rest der Runde entscheidet
+        (11, 9, 3, 7),  # [C7] des aktuellen Blocks steht vor [C8] des nächsten
+        (31, 5, 3, 2),  # Runde 2: Farbfehler in der ersten gültigen Anordnung, die perfekte steht dahinter
+    ],
+)
+def test_ruleset_engine_reproduces_cases_that_used_to_differ_from_bbppairings(n, rounds, seed, round_no):
+    players = _oracle_led_state(n, rounds, seed, round_no - 1)
+    theirs, bye = run_bbppairings(players, round_no, exe_path=EXE_PATH, total_rounds=rounds)
+    mine = ss_engine.pair_round(players, round_no, total_rounds=rounds)
+    assert {(p.white, p.black) for p in mine.pairings} == {tuple(p) for p in theirs}
+    assert mine.bye == bye

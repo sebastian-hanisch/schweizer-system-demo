@@ -210,61 +210,28 @@ def _mdp_downfloat_bias(downfloating_mdps: list[int], players: dict[int, Player]
     return (1, tuple(sorted((players[r].score, -r) for r in downfloating_mdps)))
 
 
-def _downfloat_cascade_depth_bias(
-    resident_downfloaters: list[int],
-    next_group_residents: tuple[int, ...],
-    players: dict[int, Player],
-    topscorer_threshold: float,
-) -> tuple:
-    """ZWEITER, unabhängiger Tie-Break (nach `_mdp_downfloat_bias`): bei mehreren gleich guten
-    Kandidaten, die sich NUR darin unterscheiden, WELCHER Residenten-Downfloater die Bracket
-    verlässt, bevorzugt diese Sortierung Kandidaten, deren Downfloater NICHT komplett an der
-    unmittelbar nächsten Bracket vorbei muss (d. h. dort mindestens einen kompatiblen Partner
-    hätte) - vor Kandidaten, deren Downfloater die nächste Bracket komplett überspringen muss.
-    Realer, gegen `bbpPairings.exe` gefundener Fund: bei zwei score-gleichen Residenten in einer
-    ungeraden Bracket, von denen einer noch NICHT gegen alle Mitglieder der nächsten Bracket
-    gespielt hat und der andere BEREITS gegen alle, bevorzugt bbpPairings den, der die nächste
-    Bracket komplett überspringen MUSS, weniger - der andere (der dort noch andocken kann) bleibt
-    eher `resident`, NICHT der, der ohnehin weiter kaskadieren müsste. Nur relevant, wenn
-    `next_group_residents` bekannt ist (leer -> kein Effekt, reines No-op) - gilt GLEICHERMASSEN
-    für homogene (MDP-lose) und heterogene Brackets, siehe `_yield_sorted`s Einsatzstellen."""
-    if not next_group_residents or not resident_downfloaters:
-        return (0,)
-    must_skip_entirely = sum(
-        1
-        for r in resident_downfloaters
-        if not any(compatible(players[r], players[o], topscorer_threshold) for o in next_group_residents)
-    )
-    return (must_skip_entirely,)
-
-
 def _yield_sorted(
     collected: list[tuple[tuple, "Candidate"]],
     mdp_ranks: frozenset[int],
-    next_group_residents: tuple[int, ...],
     ctx: "BracketContext",
 ) -> Iterator["Candidate"]:
-    """Sortiert `collected` wie bisher (voller `sort_key`, stabil), wendet aber INNERHALB jeder
-    exakt gleich bewerteten Gruppe (gleiches `sort_key[:3]` = C6/C7/C10-C21-Präfix, also VOR
-    `_exchange_cost`) zusätzlich `_mdp_downfloat_bias` und `_downfloat_cascade_depth_bias` an,
-    bevor die Gruppe ausgegeben wird. `mdp_ranks` darf leer sein (homogene Bracket, reiner
-    Residenten-Downfloat-Fall) - `_mdp_downfloat_bias` wird dann trivial no-op, aber
-    `_downfloat_cascade_depth_bias` bleibt wirksam.
+    """Sortiert `collected` wie bisher (voller `sort_key`, stabil), wendet aber INNERHALB jeder exakt gleich
+    bewerteten Gruppe (gleiches `sort_key[:3]` = C6/C7/C10-C21-Präfix, also VOR `_exchange_cost`) zusätzlich
+    `_mdp_downfloat_bias` an, bevor die Gruppe ausgegeben wird.
 
-    Nutzt `itertools.groupby` statt einer handgeschriebenen Gruppierungsschleife: `collected` ist
-    hier bereits vollständig sortiert, `groupby` braucht also keine zusätzliche Vorsortierung, und
-    - wichtiger - es gibt dadurch nur EINEN Code-Pfad für JEDE Gruppe (auch die letzte). Ein realer,
-    im Codereview gefundener Bug: die frühere, handgeschriebene Fassung behandelte die Gruppe NACH
-    der Schleife separat und wandte dort nur `_mdp_downfloat_bias` an, `_downfloat_cascade_depth_bias`
-    fehlte - genau für den (häufigsten) Fall, dass `collected` insgesamt nur EINE Gleichstandsgruppe
-    enthält, landete ALLES im damals unvollständig behandelten Nachlauf."""
+    Ein zweiter Tie-Break (`_downfloat_cascade_depth_bias`: bevorzuge den Downfloater, der die nächste Bracket
+    noch erreicht) war ein Ersatz für ein fehlendes [C8] und ist entfernt: [C8] entscheidet jetzt in
+    `ss_chain.py` über die ganze Restkette, und der Tie-Break lag danach bei exakt gleich guten Kandidaten
+    gegen bbpPairings falsch (ohne ihn 565 statt 561 und 563 statt 562 übereinstimmende Runden von 574/576).
+
+    Nutzt `itertools.groupby` statt einer handgeschriebenen Gruppierungsschleife: `collected` ist hier bereits
+    vollständig sortiert, `groupby` braucht also keine zusätzliche Vorsortierung, und es gibt nur EINEN
+    Code-Pfad für JEDE Gruppe (auch die letzte)."""
     collected.sort(key=lambda t: t[0])
 
     def bias(candidate: "Candidate") -> tuple:
-        mdp_downfloaters, resident_downfloaters = _partition_downfloaters(candidate, mdp_ranks)
-        return _mdp_downfloat_bias(mdp_downfloaters, ctx.players) + _downfloat_cascade_depth_bias(
-            resident_downfloaters, next_group_residents, ctx.players, ctx.topscorer_threshold
-        )
+        mdp_downfloaters, _ = _partition_downfloaters(candidate, mdp_ranks)
+        return _mdp_downfloat_bias(mdp_downfloaters, ctx.players)
 
     for _, chunk in groupby(collected, key=lambda t: t[0][:3]):
         group = [candidate for _, candidate in chunk]
@@ -703,15 +670,12 @@ def _mdp_pairable_sets(mdps: tuple[int, ...], m1: int, players: dict[int, Player
 
 
 def solve_bracket(
-    residents: list[int], mdps: list[int], ctx: BracketContext, next_group_residents: tuple[int, ...] = ()
+    residents: list[int], mdps: list[int], ctx: BracketContext
 ) -> Iterator[Candidate]:
     """Löst EINE Bracket (Art. 3.1-3.8): homogen, wenn `mdps` leer ist, sonst heterogen (MDP-Paarung
     + Restgruppe, Art. 3.3.3/3.7). Verzögert (lazy) ALLE brauchbaren Kandidaten in Prioritätsreihenfolge
-    - die aufrufende Rekursion in `ss_engine.py` entscheidet per echtem Weiterlösen, welcher tragfähig
-    ist (siehe Moduldoku). `next_group_residents` (optional) wird NUR für `_downfloat_cascade_depth_bias`
-    gebraucht (welcher Downfloater die unmittelbar nächste Bracket noch erreichen kann) - ändert
-    NICHTS an der Existenzgarantie [C4], nur an der Reihenfolge sonst exakt gleich bewerteter
-    Kandidaten. `mdps` muss NICHT vorsortiert sein - wird hier nach Art. 1.2 (Score
+    - die Kette in `ss_chain.py` liest den Strom und nimmt den ersten Kandidaten, dessen Downfloater-Menge
+    zu den dort bestimmten besten gehört. `mdps` muss NICHT vorsortiert sein - wird hier nach Art. 1.2 (Score
     absteigend, dann Rang aufsteigend) normalisiert: `Candidate.downfloaters` (die Quelle für `mdps`
     beim nächsten Aufruf) ist nur nach RANG sortiert, nicht nach Score - ohne diese Normalisierung
     würde `_mdp_pairable_sets`s [C7]-Tie-Break (niedrigst bewerteter MDP geht in die Limbo) bei
@@ -724,19 +688,14 @@ def solve_bracket(
     structural_m1 = min(m0, max_pairs)
 
     if m0 == 0:
-        # Echter, im Codereview gefundener Bug (behoben): dieser Zweig gab `_search_homogeneous`s
-        # Kandidaten früher DIREKT aus, ohne je durch `_yield_sorted` zu laufen - `_mdp_downfloat_bias`
-        # ist hier zwar immer ein No-op (keine MDPs), aber `_downfloat_cascade_depth_bias` (WELCHER
-        # Residenten-Downfloater die nächste Bracket noch erreicht) VERLIERT dadurch komplett seine
-        # Wirkung, obwohl reine Residenten-Downfloat-Gleichstände genau dieser Fall sind. Die eigene
-        # Gruppierung hier spiegelt den unten im heterogenen Zweig verwendeten "lazy je Downfloater-
-        # Stufe flushen"-Ansatz, damit die Trägheit (nicht sofort alle Stufen materialisieren) erhalten
-        # bleibt.
+        # Auch dieser Zweig läuft durch `_yield_sorted` (früher gab er `_search_homogeneous`s Kandidaten direkt aus,
+        # ohne die Gleichstands-Gruppierung). Die Gruppierung hier spiegelt den unten im heterogenen Zweig
+        # verwendeten "lazy je Downfloater-Stufe flushen"-Ansatz, damit die Trägheit erhalten bleibt.
         collected: list[tuple[tuple, Candidate]] = []
         current_downfloater_count: int | None = None
         for candidate in _search_homogeneous(residents, max_pairs, [], frozenset(), ctx):
             if current_downfloater_count is not None and len(candidate.downfloaters) != current_downfloater_count:
-                yield from _yield_sorted(collected, frozenset(), next_group_residents, ctx)
+                yield from _yield_sorted(collected, frozenset(), ctx)
                 collected = []
             current_downfloater_count = len(candidate.downfloaters)
             quality = _quality_tuple(
@@ -745,7 +704,7 @@ def solve_bracket(
             downfloater_scores = tuple(sorted((ctx.players[r].score for r in candidate.downfloaters), reverse=True))
             collected.append(((len(candidate.downfloaters), downfloater_scores, quality), candidate))
         if collected:
-            yield from _yield_sorted(collected, frozenset(), next_group_residents, ctx)
+            yield from _yield_sorted(collected, frozenset(), ctx)
         return
 
     # Art. 3.7: die MDP-Seite (S1) wird nur über Transposition der Resident-Seite (S2) variiert -
@@ -901,9 +860,9 @@ def solve_bracket(
             best_downfloaters_so_far = min(len(c.downfloaters) for _, c in collected)
             next_min_downfloaters = n_residents + m0 - 2 * _max_pairs_for(m1 - 1) if m1 > 0 else n_residents + m0
             if next_min_downfloaters > best_downfloaters_so_far:
-                yield from _yield_sorted(collected, mdp_ranks, next_group_residents, ctx)
+                yield from _yield_sorted(collected, mdp_ranks, ctx)
                 collected = []
                 best_tier[0], best_tier[1] = None, 0
 
     if collected:
-        yield from _yield_sorted(collected, mdp_ranks, next_group_residents, ctx)
+        yield from _yield_sorted(collected, mdp_ranks, ctx)

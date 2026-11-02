@@ -42,47 +42,38 @@ def test_multiple_competing_mdps_lower_score_one_cascades_even_if_earlier_ranked
 
 
 def test_downfloater_choice_prefers_one_that_can_still_reach_next_bracket():
-    # Regressionstest (echter, gegen bbpPairings.exe gefundener Bug, siehe
-    # project_turnierplanung_dag_scoping.md, achte Architekturrunde, zweiter Fund): in einer
-    # homogenen Bracket {5,6,7} (Score 2.0, ungerade) sind ALLE drei Paarungen gleich gut bewertet
-    # (kein MDP beteiligt, `_mdp_downfloat_bias` greift hier nicht) - `_exchange_cost` und die
-    # reine Generierungsreihenfolge unterscheiden hier NICHT zuverlässig. bbpPairings bevorzugt
-    # (empirisch bestätigt an einem echten Mismatch-Fall), dass der Downfloater derjenige ist, der
-    # noch mindestens einen kompatiblen Partner in der UNMITTELBAR NÄCHSTEN Bracket hat (hier: 10) -
-    # NICHT der, der diese Bracket komplett überspringen müsste. Hier hat 6 bereits gegen 10
-    # gespielt (kann 10 nicht mehr erreichen), 7 nicht - 7 soll deshalb downfloaten, nicht 6.
+    # Ursprünglich ein Tie-Break der Bracket-Suche (`_downfloat_cascade_depth_bias`), jetzt Sache der Kette
+    # (`ss_chain`, [C8]): in der homogenen Bracket {5,6,7} (Score 2,0, ungerade) sind alle drei Paarungen
+    # gleich gut bewertet. 6 hat bereits gegen 10 gespielt und erreicht die nächste Bracket nicht mehr, 5 und 7
+    # schon - 6 darf deshalb nicht downfloaten. Unter 5 und 7 entscheidet die Erzeugungsreihenfolge (5-6 zuerst).
+    from ss_chain import solve_round
+
     players = {
         5: Player(rank=5, score=2.0),
         6: Player(rank=6, score=2.0, games=(GameRecord(1, 10, "w", 1.0, counted_as_bye=False),)),
         7: Player(rank=7, score=2.0),
-        10: Player(rank=10, score=1.0),
+        10: Player(rank=10, score=1.0, games=(GameRecord(1, 6, "b", 0.0, counted_as_bye=False),)),
     }
-    ctx = BracketContext(players=players, topscorer_threshold=99.0)
-    best = next(iter(solve_bracket([5, 6, 7], [], ctx, (10,))))
-    assert best.pairs == ((5, 6),)
-    assert best.downfloaters == (7,)
+    pairs, bye = solve_round([(2.0, [5, 6, 7]), (1.0, [10])], players, 99.0)
+    assert bye is None
+    assert {frozenset(p) for p in pairs} == {frozenset((5, 6)), frozenset((7, 10))}
 
 
 def test_downfloater_choice_is_not_a_positional_shortcut():
-    # Regressionstest gegen genau die Klasse von Fix, die in derselben Sitzung ZWEIMAL gemessen
-    # katastrophal scheiterte (76,6 %/77,2 % statt ~99,5 % - siehe project_turnierplanung_dag_
-    # scoping.md, neunte Architekturrunde): ein pauschaler "spätester Rang downfloatet"-Kurzschluss
-    # statt echter `compatible()`-Prüfung gegen `next_group_residents`. Der vorherige Test hätte
-    # eine solche Regression NICHT gefangen - dort ist der spätest gereihte Resident (7) zufällig
-    # auch derjenige, der die nächste Bracket noch erreichen kann, sodass ein reiner
-    # Rang-Kurzschluss dieselbe (korrekte) Antwort liefern würde. Hier ist es umgekehrt: der
-    # spätest gereihte Resident (7) hat BEREITS gegen 10 gespielt (kann die nächste Bracket NICHT
-    # mehr erreichen) - ein Rang-Kurzschluss würde trotzdem 7 downfloaten lassen (FALSCH); die
-    # echte Kompatibilitätsprüfung muss stattdessen 6 wählen (kann 10 noch erreichen), NICHT 7.
+    # Gegenstück: der spätest gereihte Resident (7) hat bereits gegen 10 gespielt und kann die nächste Bracket
+    # nicht mehr erreichen - ein Rang-Kurzschluss "der letzte floatet" wäre falsch. 7 darf nicht mit 10 spielen.
+    from ss_chain import solve_round
+
     players = {
         5: Player(rank=5, score=2.0),
         6: Player(rank=6, score=2.0),
         7: Player(rank=7, score=2.0, games=(GameRecord(1, 10, "w", 1.0, counted_as_bye=False),)),
-        10: Player(rank=10, score=1.0),
+        10: Player(rank=10, score=1.0, games=(GameRecord(1, 7, "b", 0.0, counted_as_bye=False),)),
     }
-    ctx = BracketContext(players=players, topscorer_threshold=99.0)
-    best = next(iter(solve_bracket([5, 6, 7], [], ctx, (10,))))
-    assert 7 not in best.downfloaters
+    pairs, bye = solve_round([(2.0, [5, 6, 7]), (1.0, [10])], players, 99.0)
+    assert bye is None
+    assert frozenset((7, 10)) not in {frozenset(p) for p in pairs}
+    assert sorted(r for p in pairs for r in p) == [5, 6, 7, 10]
 
 
 # --- Aufzählung gültiger Transpositionen: Tiefensuche == erschöpfende Aufzählung ---------------------
