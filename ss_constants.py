@@ -32,17 +32,28 @@ ENGINE_MODE_HELP = {
     ),
 }
 
+# --- Baku-Beschleunigung (FIDE C.04.7) -------------------------------------------
+BAKU_DEFAULT = False
+BAKU_HELP = (
+    "Die obere Hälfte der Startrangliste (Gruppe GA, auf eine gerade Zahl aufgerundet) bekommt in der ersten "
+    "Hälfte der Runden virtuelle Punkte: zuerst 1, danach 0,5. Gepaart wird nach Tabellenpunkten plus virtuellen "
+    "Punkten - die Favoriten treffen früher aufeinander, statt dass die ersten Runden fast sicher nur "
+    "\"Stark schlägt Schwach\" ergeben. Die Tabelle zeigt weiter die echten Punkte."
+)
+
 # --- Presets -----------------------------------------------------------------
-_BASE = {"n_players": DEFAULT_N_PLAYERS, "n_rounds": DEFAULT_N_ROUNDS, "seed": DEFAULT_SEED}
+_BASE = {"n_players": DEFAULT_N_PLAYERS, "n_rounds": DEFAULT_N_ROUNDS, "seed": DEFAULT_SEED, "baku": False}
 PRESETS = {
     "Kleines Vereinsturnier (12 Spieler, 5 Runden)": {**_BASE, "n_players": 12, "n_rounds": 5},
     "Ungerade Teilnehmerzahl (13 Spieler, mit Freilosen)": {**_BASE, "n_players": 13, "n_rounds": 5},
     "Größeres Open (32 Spieler, 7 Runden)": {**_BASE, "n_players": 32, "n_rounds": 7},
     "Nur 3 Runden (viele Gleichstände am Ende)": {**_BASE, "n_players": 16, "n_rounds": 3},
+    "Open mit Baku-Beschleunigung (32 Spieler, 9 Runden)": {**_BASE, "n_players": 32, "n_rounds": 9, "baku": True},
 }
 PRESET_HELP = {
     "Kleines Vereinsturnier (12 Spieler, 5 Runden)": "Der Standardfall: 12 Spieler, 5 Runden - typische Vereinsmeisterschaft.",
     "Ungerade Teilnehmerzahl (13 Spieler, mit Freilosen)": "Bei ungerader Teilnehmerzahl bekommt jede Runde ein Spieler ein Freilos (C2: nie zweimal derselbe).",
     "Größeres Open (32 Spieler, 7 Runden)": "32 Spieler brauchen bei einem Rundenturnier 31 Runden - hier reichen 7, der ganze Punkt des Schweizer Systems.",
     "Nur 3 Runden (viele Gleichstände am Ende)": "Wenige Runden bei vielen Spielern: am Ende teilen sich mehrere Spieler denselben Score - die Bracket-Bildung zeigt das deutlich.",
+    "Open mit Baku-Beschleunigung (32 Spieler, 9 Runden)": "Das Beispiel aus der FIDE-Regel: bei 9 Runden bekommt die obere Hälfte in den Runden 1-3 einen virtuellen Punkt und in den Runden 4-5 einen halben.",
 }

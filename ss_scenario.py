@@ -9,6 +9,7 @@ from dataclasses import dataclass
 
 import ss_engine
 import ss_matching_engine
+from ss_acceleration import pair_round_accelerated
 from ss_engine import apply_round
 from ss_model import Player
 
@@ -32,9 +33,12 @@ class TournamentState:
     players: dict[int, Player]
     ratings: dict[int, float]
     rounds: tuple  # tuple[RoundResult, ...] - tatsächlich gespielte Runden (kann < n_rounds sein)
+    accelerated: bool = False  # Baku-Beschleunigung (ss_acceleration) war aktiv
 
 
-def generate_tournament(n_players: int, n_rounds: int, seed: int, engine_mode: str = RULESET) -> TournamentState:
+def generate_tournament(
+    n_players: int, n_rounds: int, seed: int, engine_mode: str = RULESET, accelerated: bool = False
+) -> TournamentState:
     """`engine_mode`: `RULESET` (Standard, `ss_engine.pair_round` - wörtlich am FIDE-Regeltext Art. 3+4,
     Schritt für Schritt nachvollziehbar) oder `MATCHING` (`ss_matching_engine.pair_round_matching` -
     bbpPairings' EIGENER Mechanismus, ein einziges rundenweit fortgeführtes Matching-Objekt, exakt aber
@@ -49,7 +53,10 @@ def generate_tournament(n_players: int, n_rounds: int, seed: int, engine_mode: s
     rounds = []
     for rnd in range(1, n_rounds + 1):
         try:
-            result = pair_fn(players, rnd, total_rounds=n_rounds)
+            if accelerated:
+                result = pair_round_accelerated(pair_fn, players, rnd, n_rounds)
+            else:
+                result = pair_fn(players, rnd, total_rounds=n_rounds)
         except _NO_VALID_PAIRING_ERRORS:
             break
         white_wins = {}
@@ -59,4 +66,4 @@ def generate_tournament(n_players: int, n_rounds: int, seed: int, engine_mode: s
         players = apply_round(players, result, white_wins)
         rounds.append(result)
 
-    return TournamentState(players=players, ratings=ratings, rounds=tuple(rounds))
+    return TournamentState(players=players, ratings=ratings, rounds=tuple(rounds), accelerated=accelerated)

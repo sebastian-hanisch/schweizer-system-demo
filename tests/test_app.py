@@ -35,8 +35,22 @@ def test_every_preset_renders(name):
         at.session_state["n_players_slider"] = p["n_players"]
         at.session_state["n_rounds_slider"] = p["n_rounds"]
         at.session_state["seed_input"] = p["seed"]
+        at.session_state["baku_checkbox"] = p["baku"]
 
     _run(setup)
+
+
+def test_baku_acceleration_shows_virtual_point_table():
+    def setup(at):
+        at.session_state["n_players_slider"] = 12
+        at.session_state["n_rounds_slider"] = 9
+        at.session_state["baku_checkbox"] = True
+
+    at = _run(setup)
+    assert any("Baku-Beschleunigung" in e.label for e in at.expander)
+    # Ohne Beschleunigung gibt es weder die Erklärung noch die Tabelle der virtuellen Punkte.
+    plain = _run()
+    assert not any("Baku-Beschleunigung: wer bekommt" in e.label for e in plain.expander)
 
 
 def test_extreme_settings_render():

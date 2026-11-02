@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import plotly.graph_objects as go
 
+from ss_acceleration import group_a_size, virtual_points
 from ss_evaluation import StandingsRow
 from ss_model import RoundResult
 
@@ -32,7 +33,25 @@ def build_round_table(rounds: tuple[RoundResult, ...]) -> go.Figure:
     return fig
 
 
-def build_standings_table(rows: list[StandingsRow]) -> go.Figure:
+def build_acceleration_table(n_players: int, n_rounds: int) -> go.Figure:
+    """Welche virtuellen Punkte die Gruppe GA (Rang 1..group_a_size) vor welcher Runde bekommt."""
+    size = min(group_a_size(n_players), n_players)
+    header = ["Runde", "Beschleunigt?", f"Virtuelle Punkte für GA (Rang 1-{size})"]
+    rounds = list(range(1, n_rounds + 1))
+    points = [virtual_points(n_rounds, r) for r in rounds]
+    columns = [
+        [str(r) for r in rounds],
+        ["ja" if p > 0 else "nein" for p in points],
+        [f"{p:.1f}" for p in points],
+    ]
+    fig = go.Figure(
+        data=[go.Table(header=dict(values=header, fill_color=NAVY, font=dict(color="white"), align="center"), cells=dict(values=columns, align="center", height=26))]
+    )
+    fig.update_layout(margin=dict(l=0, r=0, t=0, b=0), height=min(120 + n_rounds * 28, 460))
+    return fig
+
+
+def build_standings_table(rows: list[StandingsRow], group_a_ranks: frozenset[int] | None = None) -> go.Figure:
     header = ["Platz", "Rang", "Rating", "Score", "Weiß", "Schwarz", "Freilose"]
     columns = [
         [str(i + 1) for i in range(len(rows))],
@@ -43,6 +62,9 @@ def build_standings_table(rows: list[StandingsRow]) -> go.Figure:
         [str(r.black_games) for r in rows],
         [str(r.byes) for r in rows],
     ]
+    if group_a_ranks is not None:
+        header.insert(2, "Gruppe")
+        columns.insert(2, ["GA" if r.rank in group_a_ranks else "GB" for r in rows])
     fig = go.Figure(
         data=[go.Table(header=dict(values=header, fill_color=NAVY, font=dict(color="white"), align="center"), cells=dict(values=columns, align="center", height=26))]
     )

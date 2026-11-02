@@ -27,6 +27,7 @@ SETTING_SPECS = {
     "engine_mode_radio": SettingSpec(
         "engine", str, C.ENGINE_MODE_DEFAULT, allowed=frozenset({C.ENGINE_MODE_RULESET, C.ENGINE_MODE_MATCHING})
     ),
+    "baku_checkbox": SettingSpec("baku", lambda v: str(v) == "1", C.BAKU_DEFAULT, allowed=frozenset({True, False})),
 }
 
 
@@ -64,12 +65,13 @@ def load_permalink_settings():
     st.session_state["permalink_loaded"] = True
 
 
-def sync_query_params(n_players, n_rounds, seed, engine_mode):
+def sync_query_params(n_players, n_rounds, seed, engine_mode, baku=False):
     try:
         st.query_params["n"] = str(int(n_players))
         st.query_params["rounds"] = str(int(n_rounds))
         st.query_params["seed"] = str(int(seed))
         st.query_params["engine"] = str(engine_mode)
+        st.query_params["baku"] = "1" if baku else "0"
     except Exception:
         pass
 
@@ -79,6 +81,7 @@ def apply_preset(name):
     st.session_state["n_players_slider"] = p["n_players"]
     st.session_state["n_rounds_slider"] = p["n_rounds"]
     st.session_state["seed_input"] = p["seed"]
+    st.session_state["baku_checkbox"] = p["baku"]
 
 
 def randomize_seed():

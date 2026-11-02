@@ -25,6 +25,27 @@ Rundenturnier (Stück 1, gebaut+gepusht+deployed)
 | Stimmen die zwei mitgelieferten bbpPairings-Testfixturen exakt? | ✅ `dutch_2025_C5` und `dutch_2025_C9` (echte FIDE-Testfälle) werden Zahl für Zahl reproduziert. |
 | Wie genau sind die Qualitätskriterien (C6-C21) insgesamt? | ✅ **~99 %** exakte Übereinstimmung mit bbpPairings auf zufälligen Mehrrundenturnieren (4–16 Spieler, 1–4 Runden, 1427 Vergleiche zum Zeitpunkt der letzten Messung; die heutige Stichprobe erzeugt 1430 Fälle); auf einer bewusst härteren Stichprobe (6–19 Spieler, bis 6 Runden, mehr Nähe an [C1]-Erschöpfung) **~97 %**. Die restliche Lücke ist ein bekanntes, aus bbpPairings' eigenem Quellcode verstandenes Phänomen (echte Gleichstände, die ein iteratives Neu-Lösen bräuchten) - keine unerklärte Restlücke. |
 | Bleibt der Farbausgleich fair? | ✅ Weiß/Schwarz-Differenz bleibt in jedem gemessenen Turnier bei höchstens 1 je Spieler. |
+| Kostet die Baku-Beschleunigung Genauigkeit? | ✅ **Nein**: auf 576 von bbpPairings fortgeführten Runden (8–31 Spieler, 5–9 Runden) stimmen Paarungen und Freilos im bbpPairings-treuen Modus zu 99,3 % überein (ohne Beschleunigung ebenfalls 99,3 %), im Regeltext-Modus zu 95,1 % (ohne 94,1 %). |
+
+## Baku-Beschleunigung (FIDE C.04.7)
+
+In der Seitenleiste lässt sich die **Baku-Beschleunigung** zuschalten, das einzige in [C.04.7](https://handbook.fide.com/chapter/C0407202602)
+beschriebene FIDE-Verfahren. Die obere Hälfte der Startrangliste (Gruppe GA, auf eine gerade Zahl aufgerundet:
+2·⌈N/4⌉) bekommt in den ersten ⌈R/2⌉ Runden virtuelle Punkte, in der ersten Hälfte davon einen ganzen, danach einen
+halben. Gepaart wird nach Tabellenpunkten plus virtuellen Punkten; die angezeigte Turniertabelle bleibt bei den
+echten Punkten.
+
+- **Umsetzung** (`ss_acceleration.py`): ein Aufsatz, der den Engines Spieler mit dem Paarungs-Score gibt. Beide
+  Engines bleiben unverändert, weil bbpPairings (`dutch.cpp`) den beschleunigten Score ohnehin an jeder Stelle
+  benutzt: Score-Gruppen, Freilos-Wahl [C5], Farbvergleich (Art. 5.2.4) und die Float-Historie der Vorrunden.
+- **Prüfung**: das Orakel schreibt dieselben virtuellen Punkte als `XXA`-Zeilen in die TRF-Datei. Getestet sind die
+  zwei Beispiele aus Art. 1.4.4, die Gruppengröße 82 bei 161 Teilnehmern, eine von Hand berechnete Runde 1, die
+  Eigenschaft „Runde 1 mischt GA und GB nie“ und der Abgleich mit bbpPairings (`tests/test_acceleration.py`).
+- **Nicht abgebildet**: Nachmeldungen (Art. 1.3), die Demo hat ein festes Feld.
+- **Offener Befund, nicht von der Beschleunigung**: Beim Vergleich der Farben Paar für Paar (nicht nur der
+  Paarungen) wichen in dieser Messreihe rund 11–15 % der Runden ab, mit und ohne Beschleunigung gleich. Die
+  bestehenden Tests vergleichen Paarungen ohne Farbe, deshalb war das bisher unsichtbar. Es ist noch nicht
+  untersucht.
 
 ## Architektur (drei bewusste Kehrtwenden während des Baus)
 
@@ -331,6 +352,7 @@ bewusst als Heuristik (nicht als hergeleitete Regel) gekennzeichneten Teillösun
 | `ss_bracket.py` | Transposition/Tausch-Suche je Bracket (Art. 3+4) |
 | `ss_blossom.py` | Ungewichtete Kardinalitäts-Existenzprobe für [C4] |
 | `ss_engine.py` | Orchestrierung: Brackets Score-absteigend verketten (Art. 1.9.2) |
+| `ss_acceleration.py` | Baku-Beschleunigung: Gruppe GA, virtuelle Punkte, Aufsatz auf beide Engines |
 | `ss_scenario.py` | Turnierfeld + Elo-basierte Simulation |
 | `ss_evaluation.py` | Turniertabelle, Kennzahlen |
 | `ss_visualization.py` | Plotly: Rundenplan, Turniertabelle, Farbausgleich |

@@ -12,6 +12,7 @@ Lauffähig mit: streamlit run app.py
 import streamlit as st
 
 import ss_constants as C
+from ss_acceleration import accelerated_rounds, group_a_size
 from ss_evaluation import max_colour_imbalance, standings, total_byes
 from ss_presets import (
     apply_preset,
@@ -22,14 +23,19 @@ from ss_presets import (
     sync_query_params,
 )
 from ss_scenario import generate_tournament
-from ss_visualization import build_colour_balance_chart, build_round_table, build_standings_table
+from ss_visualization import (
+    build_acceleration_table,
+    build_colour_balance_chart,
+    build_round_table,
+    build_standings_table,
+)
 
 st.set_page_config(page_title="Schweizer System – Sebastian Hanisch", layout="wide")
 
 
 @st.cache_data(show_spinner="Turnier wird nach dem echten FIDE-Dutch-Regelwerk gepaart ...")
-def _tournament(n_players, n_rounds, seed, engine_mode):
-    return generate_tournament(n_players, n_rounds, seed, engine_mode=engine_mode)
+def _tournament(n_players, n_rounds, seed, engine_mode, baku=False):
+    return generate_tournament(n_players, n_rounds, seed, engine_mode=engine_mode, accelerated=baku)
 
 
 st.title("♟️ Schweizer System (FIDE Dutch System)")
@@ -101,10 +107,14 @@ with st.sidebar:
     )
     st.caption(C.ENGINE_MODE_HELP[engine_mode])
 
-sync_query_params(n_players, n_rounds, seed, engine_mode)
+    st.divider()
+    st.header("🚀 Beschleunigung")
+    baku = st.checkbox("Baku-Beschleunigung (FIDE C.04.7)", key="baku_checkbox", help=C.BAKU_HELP)
+
+sync_query_params(n_players, n_rounds, seed, engine_mode, baku)
 
 n_players, n_rounds, seed = int(n_players), int(n_rounds), int(seed)
-tournament = _tournament(n_players, n_rounds, seed, engine_mode)
+tournament = _tournament(n_players, n_rounds, seed, engine_mode, baku)
 rows = standings(tournament.players, tournament.ratings)
 
 if len(tournament.rounds) < n_rounds:
@@ -118,8 +128,20 @@ st.markdown("---")
 st.markdown("## 🎯 Rundenplan")
 st.plotly_chart(build_round_table(tournament.rounds), width="stretch", key="round_table")
 
+if baku:
+    with st.expander("🚀 Baku-Beschleunigung: wer bekommt wann virtuelle Punkte?", expanded=True):
+        st.markdown(
+            f"Gruppe **GA** sind die ersten **{min(group_a_size(n_players), n_players)}** von {n_players} Spielern "
+            "(obere Hälfte, auf eine gerade Zahl aufgerundet), alle anderen sind **GB**. Beschleunigt werden die "
+            f"ersten **{accelerated_rounds(n_rounds)}** von {n_rounds} Runden: GA bekommt vor der ersten Hälfte davon "
+            "einen virtuellen Punkt, vor den übrigen einen halben. Gepaart wird nach Tabellenpunkten **plus** "
+            "virtuellen Punkten; die Turniertabelle unten zeigt nur die echten Punkte."
+        )
+        st.plotly_chart(build_acceleration_table(n_players, n_rounds), width="stretch", key="acceleration_table")
+
 st.markdown("## 🎯 Turniertabelle")
-st.plotly_chart(build_standings_table(rows), width="stretch", key="standings")
+group_a_ranks = frozenset(range(1, group_a_size(n_players) + 1)) if baku else None
+st.plotly_chart(build_standings_table(rows, group_a_ranks), width="stretch", key="standings")
 
 st.markdown("**Farbausgleich je Spieler**")
 st.plotly_chart(build_colour_balance_chart(rows), width="stretch", key="colour_balance")

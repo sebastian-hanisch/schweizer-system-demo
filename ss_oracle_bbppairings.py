@@ -30,7 +30,19 @@ def _player_line(rank: int, score: float, rounds: list[tuple[int, str | None, st
     return s
 
 
-def write_trf(players: dict[int, Player], next_round: int, absent: frozenset[int] = frozenset()) -> str:
+def _acceleration_line(rank: int, values: list[float]) -> str:
+    # `XXA`-Zeile (src/fileformats/trf.cpp, readPlayerAccelerationsXxa): Spielernummer in Spalte 5-8,
+    # dann je Runde ein 4-stelliger Wert im 5er-Raster ab Spalte 10.
+    return "XXA " + f"{rank:>4}" + "".join(f" {v:>4.1f}" for v in values)
+
+
+def write_trf(
+    players: dict[int, Player],
+    next_round: int,
+    absent: frozenset[int] = frozenset(),
+    accelerations: dict[int, list[float]] | None = None,
+    total_rounds: int | None = None,
+) -> str:
     lines = ["012 Cross-Check"]
     any_colour_history = any(g.colour is not None for p in players.values() for g in p.games)
     for rank in sorted(players):
@@ -50,7 +62,9 @@ def write_trf(players: dict[int, Player], next_round: int, absent: frozenset[int
         # Ohne jede Farbhistorie verlangt bbpPairings eine explizite Anfangsfarben-Regel (siehe
         # src/fileformats/trf.cpp, Direktive "XXC white1") - sonst Parse-Fehler.
         lines.append("XXC white1")
-    lines.append(f"XXR {next_round}")
+    for rank in sorted(accelerations or {}):
+        lines.append(_acceleration_line(rank, accelerations[rank]))
+    lines.append(f"XXR {total_rounds if total_rounds is not None else next_round}")
     return "\n".join(lines) + "\n"
 
 
@@ -65,7 +79,15 @@ def _find_exe() -> Path | None:
     return None
 
 
-def run_bbppairings(players: dict[int, Player], next_round: int, absent: frozenset[int] = frozenset(), *, exe_path: str | None = None) -> tuple[list[tuple[int, int]], int | None]:
+def run_bbppairings(
+    players: dict[int, Player],
+    next_round: int,
+    absent: frozenset[int] = frozenset(),
+    *,
+    exe_path: str | None = None,
+    accelerations: dict[int, list[float]] | None = None,
+    total_rounds: int | None = None,
+) -> tuple[list[tuple[int, int]], int | None]:
     """Gibt (Paare, Freilos) zurück - Paare als (weiss, schwarz) Ranglisten-Nummern. Wirft
     `BbpPairingsUnavailable`, wenn die Programmdatei nicht gefunden wird (z. B. offline, kein Netz
     zum Herunterladen) - Aufrufer sollte den Test dann überspringen (skipif), nicht fehlschlagen."""
@@ -73,7 +95,7 @@ def run_bbppairings(players: dict[int, Player], next_round: int, absent: frozens
     if exe is None or not exe.is_file():
         raise BbpPairingsUnavailable("bbpPairings-Programmdatei nicht gefunden (BBPPAIRINGS_EXE setzen)")
 
-    trf_text = write_trf(players, next_round, absent)
+    trf_text = write_trf(players, next_round, absent, accelerations, total_rounds)
     import tempfile
 
     with tempfile.TemporaryDirectory() as tmp:
