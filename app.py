@@ -58,7 +58,7 @@ with st.expander("💬 In einfachen Worten"):
         """
 Bei vielen Spielern und wenigen Terminen kann nicht jeder gegen jeden spielen. Das Schweizer System löst deshalb in jeder Runde Spieler mit ähnlichem Punktestand gegeneinander aus: Wer gewinnt, trifft auf andere Gewinner, wer verliert, auf andere Verlierer. Dazu kommen feste Regeln: Zwei Spieler treffen nie zweimal aufeinander, die Farben wechseln möglichst ab, und bei einer ungeraden Zahl bekommt einer spielfrei, nie zweimal derselbe.
 
-Die Demo lost zwei Wege aus, einen, der dem Regeltext Schritt für Schritt folgt, und einen, der das offizielle Referenzprogramm nachbaut. Beide vergleicht sie mit diesem Programm. Zusätzlich lässt sich die Baku-Beschleunigung zuschalten, bei der die obere Hälfte der Setzliste in den ersten Runden gedachte Zusatzpunkte bekommt.
+Die Demo lost zwei Wege aus, einen, der dem Regeltext Schritt für Schritt folgt, und einen, der das offizielle Referenzprogramm nachbaut. Beide wurden in Testläufen mit diesem Programm verglichen. Zusätzlich lässt sich die Baku-Beschleunigung zuschalten, bei der die obere Hälfte der Setzliste in den ersten Runden gedachte Zusatzpunkte bekommt.
 
 [Ausführlich und verständlich erklärt, mit Fachteil](https://sebastianhanisch.net/schweizer-system-erklaert.html)
         """
