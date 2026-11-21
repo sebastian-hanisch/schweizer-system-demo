@@ -49,8 +49,8 @@ from ss_quality import colour_terms, downfloat_repeat_terms, upfloat_repeat_term
 # untersuchten Fall bbpPairings' tatsächliche Wahl GAR NICHT in `collected` auftauchte - kein
 # Tie-Break-Problem (jede Kandidatenreihenfolge wäre falsch gewesen), sondern eine echte
 # Suchbreiten-Grenze. Angehoben und GEMESSEN (nicht nur angenommen): Standardstichprobe
-# (4-16 Spieler, 1-4 Runden, 30 Saatwerte) 98,178 % -> 99,299 % (26 -> 10 Mismatches), härtere
-# Stichprobe (6-19 Spieler, bis 6 Runden, 25 Saatwerte) 92,0 % -> 97,243 %. Performance-Kosten
+# (4-16 Spieler, 1-4 Runden, 30 Seeds) 98,178 % -> 99,299 % (26 -> 10 Mismatches), härtere
+# Stichprobe (6-19 Spieler, bis 6 Runden, 25 Seeds) 92,0 % -> 97,243 %. Performance-Kosten
 # gemessen (31-32 Spieler/9 Runden, 360 Stichproben): Median 0,003s -> 0,033s, schlechtester Fall
 # 0,15s -> 1,79s - für eine interaktive Demo weiterhin unproblematisch.
 MAX_RAW_ATTEMPTS = 200_000

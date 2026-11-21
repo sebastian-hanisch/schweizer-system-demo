@@ -5,7 +5,7 @@ die WÖRTLICH-regeltext-treue `ss_engine.py`/`ss_bracket.py` prüft.
 Läuft nur, wenn `BBPPAIRINGS_EXE` gesetzt ist (siehe `test_oracle_bbppairings.py`s Moduldoku).
 
 **Gemessener Befund** (project_turnierplanung_dag_scoping.md, 2026-09-29): volle Standardstichprobe
-(30 Saatwerte/4-16 Spieler/1-4 Runden) **100,000 %** (1430/1430), härtere Stichprobe (25 Saatwerte/
+(30 Seeds/4-16 Spieler/1-4 Runden) **100,000 %** (1430/1430), härtere Stichprobe (25 Seeds/
 6-19 Spieler/bis 6 Runden) **100,000 %** (1994/1994) - EXAKTE Übereinstimmung auf beiden Stichproben.
 Der letzte verbliebene Fall wurde auf einen gemeinsamen, latenten Bug in `ss_colour.allocate`
 zurückgeführt (Art. 5.2.4-Gleichstand verglich nur nach Rang statt nach Score-dann-Rang wie

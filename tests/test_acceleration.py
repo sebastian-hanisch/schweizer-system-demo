@@ -220,7 +220,7 @@ def _agreement(mode, sizes, round_counts, seeds, accelerate=True):
 @needs_oracle
 def test_matching_mode_agrees_exactly_with_bbppairings_on_accelerated_tournaments():
     # Gemessen 100 % (576 von 576 Runden; 8-31 Spieler, 5-9 Runden), Paarung, Freilos UND Farben. Diese
-    # Stichprobe ist eine Teilmenge davon (gleiche Saatwerte), darum ist die Prüfung exakt.
+    # Stichprobe ist eine Teilmenge davon (gleiche Seeds), darum ist die Prüfung exakt.
     rate, total, wrong_colours = _agreement(MATCHING, sizes=(8, 11, 14, 17), round_counts=(5, 9), seeds=range(2))
     assert total >= 60
     assert rate == 1.0, f"{rate:.1%} von {total}"
@@ -253,7 +253,7 @@ def test_ruleset_mode_agrees_with_bbppairings_on_accelerated_tournaments():
 def test_ruleset_mode_agrees_with_bbppairings_on_larger_fields_without_acceleration():
     # Regression der Bracket-Suche (ss_bracket: perfekter bzw. bester Kandidat auch jenseits der ersten 300 gültigen
     # Anordnungen; Obergrenze zählt nur Kandidaten der besten Stufe). Vorher 94,4 % auf der vollen Messreihe, jetzt
-    # 100 %; diese Teilmenge hier (4 Saatwerte, anderes Ausgangsmaterial als die Messreihe): 96,6 % (317 von 328), alle Farben gleich.
+    # 100 %; diese Teilmenge hier (4 Seeds, anderes Ausgangsmaterial als die Messreihe): 96,6 % (317 von 328), alle Farben gleich.
     rate, total, wrong_colours = _agreement(
         RULESET, sizes=(8, 11, 14, 17), round_counts=(5, 7, 9), seeds=range(4), accelerate=False
     )
