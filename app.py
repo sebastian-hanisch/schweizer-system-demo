@@ -220,7 +220,7 @@ with st.expander("📐 Mathematische Formulierung"):
 | $s_i$ | echter Punktestand des Spielers $i$ |
 | $G_A$ | obere Hälfte der Setzliste (Gruppe der Baku-Beschleunigung) |
 | $a$ | Zahl der beschleunigten Runden |
-| $v_r$ | gedachte Zusatzpunkte der Gruppe $G_A$ vor Runde $r$ |
+| $v_r$ | virtuelle Zusatzpunkte der Gruppe $G_A$ vor Runde $r$ |
 | $R_A$, $R_B$ | Wertungszahlen zweier Spieler in der Simulation |
 | $E_A$ | erwarteter Punktanteil von $A$ gegen $B$ |
 
@@ -262,7 +262,7 @@ aufgerundet auf eine gerade Zahl:
 
 $$|G_A| = 2\left\lceil N/4 \right\rceil$$
 
-Beschleunigt werden die ersten $a = \lceil R/2 \rceil$ Runden. Vor der ersten Hälfte davon bekommt $G_A$ einen gedachten Punkt, vor den übrigen
+Beschleunigt werden die ersten $a = \lceil R/2 \rceil$ Runden. Vor der ersten Hälfte davon bekommt $G_A$ einen virtuellen Punkt, vor den übrigen
 beschleunigten Runden einen halben, danach nichts; gepaart wird nach $s_i + v_r$ für $i \in G_A$:
 
 $$v_r = 1 \ (r \le \lceil a/2 \rceil), \quad v_r = 1/2 \ (\lceil a/2 \rceil < r \le a), \quad v_r = 0 \ (r > a), \qquad a = \lceil R/2 \rceil$$
